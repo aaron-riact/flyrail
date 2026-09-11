@@ -1,0 +1,17 @@
+{
+  "name": "pyforms-renderer",
+  "version": "0.1.0",
+  "description": "BYOF renderer: server-driven component trees over your own websocket",
+  "type": "module",
+  "exports": {
+    ".": "./protocol.mjs",
+    "./store": "./store.mjs",
+    "./react": "./ServerNode.tsx"
+  },
+  "scripts": {
+    "test": "node --test js/protocol.test.mjs js/store.test.mjs"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  }
+}
