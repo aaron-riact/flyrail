@@ -10,6 +10,8 @@ import {
   normalizeButtonProps,
   applyOps,
   parsePointer,
+  debounce,
+  createChangeSender,
 } from "./protocol.mjs";
 
 test("click action omits event when absent", () => {
@@ -58,6 +60,44 @@ test("label folds into children for buttons only", () => {
     normalizeButtonProps({ label: "L", children: "C" }, true),
     { label: "L", children: "C" },
   );
+});
+
+test("debounce coalesces rapid calls into the latest", async () => {
+  const calls = [];
+  const fn = debounce((v) => calls.push(v), 10);
+  fn("a");
+  fn("b");
+  fn("c");
+  await new Promise((r) => setTimeout(r, 30));
+  assert.deepEqual(calls, ["c"]);
+});
+
+test("debounce flush sends pending immediately, cancel drops it", async () => {
+  const calls = [];
+  const fn = debounce((v) => calls.push(v), 20);
+  fn("a");
+  fn.flush();
+  assert.deepEqual(calls, ["a"]);
+  fn("b");
+  fn.cancel();
+  await new Promise((r) => setTimeout(r, 40));
+  assert.deepEqual(calls, ["a"]);
+});
+
+test("change sender wraps debounced input values", async () => {
+  const sent = [];
+  const sender = createChangeSender((m) => sent.push(m), 10);
+  sender.send("0.1:on_change:k1", "h");
+  sender.send("0.1:on_change:k1", "hi");
+  await new Promise((r) => setTimeout(r, 30));
+  assert.deepEqual(sent, [
+    {
+      chan: "ui",
+      type: "action",
+      handlerId: "0.1:on_change:k1",
+      event: { value: "hi" },
+    },
+  ]);
 });
 
 test("pointer unescapes ~0/~1 and addresses root", () => {

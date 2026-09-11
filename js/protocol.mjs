@@ -42,6 +42,43 @@ export function normalizeButtonProps(props, isButton) {
   return out;
 }
 
+export function debounce(fn, waitMs) {
+  // Trailing-edge only: keystrokes coalesce, the last value always sends.
+  let timer = null;
+  let lastArgs = null;
+  function debounced(...args) {
+    lastArgs = args;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      fn(...lastArgs);
+    }, waitMs);
+  }
+  debounced.cancel = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+  };
+  debounced.flush = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+      fn(...lastArgs);
+    }
+  };
+  return debounced;
+}
+
+export function createChangeSender(send, waitMs = 150) {
+  // One instance per input node (see ServerNode): coalescing is keyed by
+  // call order, so sharing one across fields would clobber concurrent edits.
+  const debounced = debounce((hid, value) => send(changeMessage(hid, value)), waitMs);
+  return {
+    send: (hid, value) => debounced(hid, value),
+    flush: () => debounced.flush(),
+    cancel: () => debounced.cancel(),
+  };
+}
+
 export function parsePointer(path) {
   // RFC6901 with our convention: "" and "/" both address the document root.
   if (path === "" || path === "/") return [];

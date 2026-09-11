@@ -1,6 +1,6 @@
 import * as React from 'react';
 import {
-  changeMessage,
+  createChangeSender,
   actionMessage,
   childKey,
   isKnownComponent,
@@ -40,6 +40,11 @@ export function createRenderer(registry: Record<string, any>) {
   }
 
   function ServerNode({ node, send }: { node: any; send: (msg: any) => void }) {
+    // First line, before any early return: hooks must run unconditionally.
+    const senderRef = React.useRef<{
+      hid: string;
+      sender: ReturnType<typeof createChangeSender>;
+    } | null>(null);
     if (!node) return null;
     if (node.type === '__Slot__') {
       return <SlotView name={node.props.name} fallback={node.props.default} />;
@@ -54,7 +59,15 @@ export function createRenderer(registry: Record<string, any>) {
     }
     if (node.on_change) {
       const hid = node.on_change.handlerId;
-      props.onChange = (e: any) => send(changeMessage(hid, e?.target?.value));
+      // One debounced sender per input: sharing across fields would let
+      // concurrent edits clobber each other. Recreate on handlerId change
+      // (list reorder) so strokes never route to a stale row.
+      if (!senderRef.current || senderRef.current.hid !== hid) {
+        senderRef.current?.sender.cancel();
+        senderRef.current = { hid, sender: createChangeSender(send) };
+      }
+      const sender = senderRef.current.sender;
+      props.onChange = (e: any) => sender.send(hid, e?.target?.value);
     }
     const children = (node.children || []).map((c: any, i: number) => {
       if (typeof c === 'string') return <React.Fragment key={i}>{c}</React.Fragment>;
