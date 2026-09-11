@@ -100,6 +100,17 @@ class Layout:
         """Convenience for fixed-tick loops: render + diff."""
         return self.diff_and_commit(self.render(state))
 
+    def snapshot(self, state: Any, seq: int) -> dict:
+        """Full-tree recovery message answering a client resync-request.
+
+        Re-renders, re-registers handlers, and resets the diff baseline so
+        subsequent ticks stay incremental from the snapshot point.
+        """
+        tree = self.render(state)
+        self._last_tree = copy.deepcopy(tree)
+        self._last_hash = _hash(tree)
+        return {"chan": "ui", "type": "snapshot", "seq": seq, "tree": tree}
+
     def dispatch(self, handler_id: str, state: Any, event: Any = None) -> None:
         fn = self.registry.get(handler_id)
         if fn is None:
