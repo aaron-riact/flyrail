@@ -41,7 +41,9 @@ class Layout:
     ``render(state)`` serializes callables to ``{"handlerId": ...}``;
     ``diff_and_commit(tree)`` returns RFC6902-ish ops, or ``[]`` when nothing
     changed so the tick loop sends nothing; ``tick(state)`` does both.
-    Dispatch/slots follow in the next commit.
+    ``dispatch(handlerId, state, event)`` routes client actions back to the
+    registered Python callable; ``set_slot(name, value)`` pushes hot per-tick
+    values past the diff entirely.
     """
 
     def __init__(self, render_fn: Callable[[Any], dict], allowed_types: set[str] | None = None):
@@ -50,6 +52,7 @@ class Layout:
         self.registry: dict[str, Callable] = {}
         self._last_tree: Any = None
         self._last_hash: str | None = None
+        self._slots: dict[str, Any] = {}
 
     def render(self, state: Any) -> dict:
         self.registry.clear()
@@ -96,3 +99,17 @@ class Layout:
     def tick(self, state: Any) -> list[dict]:
         """Convenience for fixed-tick loops: render + diff."""
         return self.diff_and_commit(self.render(state))
+
+    def dispatch(self, handler_id: str, state: Any, event: Any = None) -> None:
+        fn = self.registry.get(handler_id)
+        if fn is None:
+            raise KeyError(f"unknown handler {handler_id!r}")
+        fn(state, event)
+
+    def set_slot(self, name: str, value: Any) -> dict | None:
+        """Hot path bypassing the diff: unchanged values return None."""
+        h = _hash(value)
+        if self._slots.get(name, {}).get("hash") == h:
+            return None
+        self._slots[name] = {"hash": h, "value": value}
+        return {"chan": "ui", "type": "slot", "name": name, "value": value}
