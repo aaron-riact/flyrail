@@ -8,6 +8,8 @@ import {
   childKey,
   isKnownComponent,
   normalizeButtonProps,
+  applyOps,
+  parsePointer,
 } from "./protocol.mjs";
 
 test("click action omits event when absent", () => {
@@ -56,4 +58,37 @@ test("label folds into children for buttons only", () => {
     normalizeButtonProps({ label: "L", children: "C" }, true),
     { label: "L", children: "C" },
   );
+});
+
+test("pointer unescapes ~0/~1 and addresses root", () => {
+  assert.deepEqual(parsePointer(""), []);
+  assert.deepEqual(parsePointer("/"), []);
+  assert.deepEqual(parsePointer("/a~1b/~0c"), ["a/b", "~c"]);
+});
+
+test("applyOps replaces wholesale arrays like Layout emits", () => {
+  const doc = { type: "Stack", children: [{ type: "Text", key: "a" }] };
+  const out = applyOps(doc, [
+    { op: "replace", path: "/children", value: [{ type: "Text", key: "b" }] },
+  ]);
+  assert.deepEqual(out.children, [{ type: "Text", key: "b" }]);
+  // Input untouched (React state safety).
+  assert.deepEqual(doc.children, [{ type: "Text", key: "a" }]);
+});
+
+test("applyOps handles add/remove on dicts", () => {
+  const out = applyOps({ a: 1 }, [
+    { op: "add", path: "/b", value: 2 },
+    { op: "remove", path: "/a" },
+  ]);
+  assert.deepEqual(out, { b: 2 });
+});
+
+test("applyOps replaces the root document", () => {
+  assert.deepEqual(applyOps({ a: 1 }, [{ op: "replace", path: "", value: { b: 2 } }]), { b: 2 });
+});
+
+test("applyOps rejects unknown ops and skew loudly", () => {
+  assert.throws(() => applyOps({}, [{ op: "move", path: "/a" }]), /unsupported op/);
+  assert.throws(() => applyOps({}, [{ op: "replace", path: "/missing", value: 1 }]), /missing key/);
 });

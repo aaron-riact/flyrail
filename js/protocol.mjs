@@ -41,3 +41,79 @@ export function normalizeButtonProps(props, isButton) {
   }
   return out;
 }
+
+export function parsePointer(path) {
+  // RFC6901 with our convention: "" and "/" both address the document root.
+  if (path === "" || path === "/") return [];
+  if (!path.startsWith("/")) throw new Error(`invalid pointer ${JSON.stringify(path)}`);
+  return path
+    .slice(1)
+    .split("/")
+    .map((seg) => seg.replace(/~1/g, "/").replace(/~0/g, "~"));
+}
+
+function parentOf(doc, segments) {
+  let node = doc;
+  for (const seg of segments) {
+    if (node === null || typeof node !== "object") {
+      throw new Error("pointer traverses a scalar");
+    }
+    node = Array.isArray(node) ? node[Number(seg)] : node[seg];
+  }
+  return node;
+}
+
+function setKey(container, key, value, create) {
+  if (Array.isArray(container)) {
+    if (key === "-") {
+      if (!create) throw new Error("'-' only valid for add");
+      container.push(value);
+      return;
+    }
+    const i = Number(key);
+    if (!Number.isInteger(i) || i < 0 || i > container.length - (create ? 0 : 1)) {
+      throw new Error(`array index out of bounds: ${JSON.stringify(key)}`);
+    }
+    if (create) container.splice(i, 0, value);
+    else container[i] = value;
+    return;
+  }
+  if (create && !(key in container)) {
+    // add: new key; replace: must exist (strict, surfaces skew loudly)
+  } else if (!create && !(key in container)) {
+    throw new Error(`missing key ${JSON.stringify(key)}`);
+  }
+  container[key] = value;
+}
+
+export function applyOps(doc, ops) {
+  // Applies the RFC6902 subset Layout emits (add/replace/remove). Returns a
+  // new document; the input is deep-cloned, never mutated (React state safe).
+  // Only understands what _diff produces: dict recursion plus wholesale
+  // array replacement, but array indices are handled for robustness.
+  let out = structuredClone(doc);
+  for (const op of ops ?? []) {
+    const segments = parsePointer(op.path ?? "");
+    if (segments.length === 0) {
+      if (op.op === "remove") {
+        out = {};
+      } else {
+        out = structuredClone(op.value);
+      }
+      continue;
+    }
+    const parent = parentOf(out, segments.slice(0, -1));
+    const key = segments[segments.length - 1];
+    if (op.op === "remove") {
+      if (Array.isArray(parent)) parent.splice(Number(key), 1);
+      else delete parent[key];
+    } else if (op.op === "add") {
+      setKey(parent, key, structuredClone(op.value), true);
+    } else if (op.op === "replace") {
+      setKey(parent, key, structuredClone(op.value), false);
+    } else {
+      throw new Error(`unsupported op ${JSON.stringify(op.op)}`);
+    }
+  }
+  return out;
+}
