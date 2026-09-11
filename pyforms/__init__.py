@@ -2,8 +2,9 @@
 
 Python API is reactpy-style but transport/V DOM agnostic:
   - you build dict trees with helpers (Stack, Text, Button, ...)
-  - callables in on_click stay in Python (Layout serializes them later)
+  - Layout.render(state) replaces callables with {"handlerId": ...} descriptors
 """
 from .core import component, Slot, Stack, Text, Button, TextField
+from .layout import Layout
 
-__all__ = ["component", "Slot", "Stack", "Text", "Button", "TextField"]
+__all__ = ["component", "Slot", "Stack", "Text", "Button", "TextField", "Layout"]
