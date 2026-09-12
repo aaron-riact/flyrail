@@ -8,3 +8,9 @@ dependencies = []
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
+
+# The repo root holds flyrail/, js/, docs/, example/ and tests/: a flat layout
+# with more than one candidate top-level package. setuptools refuses to guess
+# between them, so auto-discovery aborts the build. Name the one package.
+[tool.setuptools]
+packages = ["flyrail"]
