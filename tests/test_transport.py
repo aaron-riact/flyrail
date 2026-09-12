@@ -1,7 +1,7 @@
 """Focused tests for transport envelope helpers."""
 import unittest
 
-from pyforms.transport import ui_envelope_patch
+from flyrail.transport import ui_envelope_patch
 
 
 class EnvelopeTest(unittest.TestCase):

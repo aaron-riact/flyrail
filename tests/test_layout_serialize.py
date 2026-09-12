@@ -1,7 +1,7 @@
 """Focused tests for Layout.render handler serialization."""
 import unittest
 
-from pyforms import Layout, Slot, Stack, Text, Button
+from flyrail import Layout, Slot, Stack, Text, Button
 
 
 class SerializeTest(unittest.TestCase):

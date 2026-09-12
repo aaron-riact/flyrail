@@ -1,7 +1,7 @@
-"""Focused tests for pyforms.core element constructors."""
+"""Focused tests for flyrail.core element constructors."""
 import unittest
 
-from pyforms.core import Slot, Stack, Text, Button, TextField, component
+from flyrail.core import Slot, Stack, Text, Button, TextField, component
 
 
 class ComponentMarkerTest(unittest.TestCase):
@@ -10,14 +10,14 @@ class ComponentMarkerTest(unittest.TestCase):
         def MyPanel(state):
             ...
 
-        self.assertTrue(MyPanel._is_pyforms_component)
+        self.assertTrue(MyPanel._is_flyrail_component)
 
     def test_parametrized_decorator_keeps_key_arg(self):
         @component(key_arg="id")
         def Other(state):
             ...
 
-        self.assertTrue(Other._is_pyforms_component)
+        self.assertTrue(Other._is_flyrail_component)
         self.assertEqual(Other._key_arg, "id")
 
 

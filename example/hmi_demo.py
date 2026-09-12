@@ -8,8 +8,8 @@ slot fast-path for hot values, snapshot recovery after a dropped patch.
 The client half (apply, seq tracking, resync) is the JS store in
 js/store.mjs; here the scripted client just prints what it would do.
 """
-from pyforms import Layout, Stack, Text, Button, TextField
-from pyforms.transport import ui_envelope_patch
+from flyrail import Layout, Stack, Text, Button, TextField
+from flyrail.transport import ui_envelope_patch
 
 
 class Sim:

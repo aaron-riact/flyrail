@@ -6,8 +6,8 @@ snapshot recovery - all through Layout + transport, no internals touched.
 """
 import unittest
 
-from pyforms import Layout, Stack, Text, Button, TextField
-from pyforms.transport import ui_envelope_patch
+from flyrail import Layout, Stack, Text, Button, TextField
+from flyrail.transport import ui_envelope_patch
 
 
 class Sim:

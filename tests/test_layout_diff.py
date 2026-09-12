@@ -1,7 +1,7 @@
 """Focused tests for Layout diffing and tick suppression."""
 import unittest
 
-from pyforms import Layout, Stack, Text
+from flyrail import Layout, Stack, Text
 
 
 class DiffTest(unittest.TestCase):

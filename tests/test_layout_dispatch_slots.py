@@ -1,7 +1,7 @@
 """Focused tests for Layout action dispatch and slot fast-path."""
 import unittest
 
-from pyforms import Layout, Stack, Text, Button
+from flyrail import Layout, Stack, Text, Button
 
 
 class DispatchTest(unittest.TestCase):

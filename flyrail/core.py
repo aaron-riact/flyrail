@@ -13,7 +13,7 @@ def component(fn=None, *, key_arg: str | None = None):
         def render(self, state): ...
     """
     def wrap(f):
-        f._is_pyforms_component = True
+        f._is_flyrail_component = True
         f._key_arg = key_arg
         return f
     return wrap(fn) if fn else wrap

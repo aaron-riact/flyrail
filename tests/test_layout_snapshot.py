@@ -2,7 +2,7 @@
 import json
 import unittest
 
-from pyforms import Layout, Stack, Text, Button
+from flyrail import Layout, Stack, Text, Button
 
 
 class SnapshotTest(unittest.TestCase):

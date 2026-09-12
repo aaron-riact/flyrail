@@ -9,7 +9,7 @@ def ui_envelope_patch(ops: list, seq: int) -> dict:
 
 FASTAPI_EXAMPLE = '''
 # tick integration sketch (your loop owns timing):
-from pyforms import Layout
+from flyrail import Layout
 layout = Layout(MyPanel().render, allowed_types={"Stack","Text","Button","TextField"})
 seq = 0
 def on_tick(state):

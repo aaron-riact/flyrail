@@ -1,4 +1,4 @@
-"""pyforms - BYOF server-driven UI core.
+"""flyrail - BYOF server-driven UI core.
 
 Python API is reactpy-style but transport/V DOM agnostic:
   - you build dict trees with helpers (Stack, Text, Button, ...)

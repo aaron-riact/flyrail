@@ -1,5 +1,5 @@
 [project]
-name = "pyforms"
+name = "flyrail"
 version = "0.1.0"
 description = "Bring-your-own-frontend server-driven UI core (reactpy-style API, transport agnostic)"
 requires-python = ">=3.10"
