@@ -134,3 +134,32 @@ class PruneTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_hook_frames_are_not_visible_from_another_thread():
+    import threading
+
+    from flyrail import Layout, component, use_state
+
+    escaped = {}
+
+    @component
+    def Outer(_state):
+        use_state(1)
+
+        def peek():
+            try:
+                use_state(2)
+                escaped['leaked'] = True
+            except RuntimeError as error:
+                escaped['error'] = str(error)
+
+        thread = threading.Thread(target=peek)
+        thread.start()
+        thread.join(timeout=5)
+        return Text('x')
+
+    Layout(Outer).render(None)
+
+    assert 'leaked' not in escaped
+    assert 'inside a @component body' in escaped['error']
