@@ -5,6 +5,8 @@ import hashlib
 import json
 from typing import Any, Callable
 
+from . import hooks as _hooks
+
 
 def _hash(tree: Any) -> str:
     return hashlib.sha256(json.dumps(tree, sort_keys=True, default=str).encode()).hexdigest()
@@ -62,6 +64,10 @@ class Layout:
         self._last_tree: Any = None
         self._last_hash: str | None = None
         self._slots: dict[str, Any] = {}
+        self._hooks: dict = {}
+        self._hooks_seen: dict = {}
+        self._hooks_visited: set = set()
+        self._hooks_arity: dict = {}
         self._version: Any = None
         self._dirty = True
 
@@ -72,27 +78,67 @@ class Layout:
 
     def render(self, state: Any) -> dict:
         self.registry.clear()
-        raw = self.render_fn(state)
-        tree = copy.deepcopy(raw)
-        self._serialize(tree, path="0")
-        if self.allowed_types:
-            self._check_allowlist(tree)
+        tree = self._render_once(state)
         if self.strict and getattr(self.render_fn, "_flyrail_pure", False):
-            self._check_deterministic(state, tree)
+            again = self._render_once(state)
+            if again != tree:
+                raise AssertionError(
+                    "render_fn marked @pure produced different trees across "
+                    "two immediate renders; remove @pure or eliminate the "
+                    "nondeterminism (time, random, counters, unversioned reads)")
         self._dirty = False
         return tree
 
-    def _check_deterministic(self, state: Any, first: dict) -> None:
-        # Compare serialized trees: raw trees hold fresh closures per render
-        # (identity-unequal by construction), while handlerIds are
-        # deterministic. Second pass overwrites identical registry entries.
-        again = copy.deepcopy(self.render_fn(state))
-        self._serialize(again, path="0")
-        if again != first:
-            raise AssertionError(
-                "render_fn marked @pure produced different trees across two "
-                "immediate renders; remove @pure or eliminate the "
-                "nondeterminism (time, random, counters, unversioned reads)")
+    def _render_once(self, state: Any) -> dict:
+        self._hooks_seen = {}
+        self._hooks_visited = set()
+        expanded = self._expand(self.render_fn(state))
+        for k in list(self._hooks):
+            if k not in self._hooks_visited:
+                del self._hooks[k]
+                self._hooks_arity.pop(k, None)
+        tree = copy.deepcopy(expanded)
+        self._serialize(tree, path="0")
+        if self.allowed_types:
+            self._check_allowlist(tree)
+        return tree
+
+    def _expand(self, node: Any, path: str = "0") -> Any:
+        if isinstance(node, dict) and node.get("type") == "__Component__":
+            fn = node["fn"]
+            key = node.get("key")
+            slot_id = (id(fn), key if key is not None else path)
+            count = self._hooks_seen.get(slot_id, 0) + 1
+            self._hooks_seen[slot_id] = count
+            if count > 1:
+                raise ValueError(
+                    f"duplicate component key {key!r} for "
+                    f"{getattr(fn, '__name__', fn)}; keys must be unique "
+                    "per component within one render")
+            slots = self._hooks.setdefault(slot_id, [])
+            frame = _hooks.enter(slots, self.invalidate)
+            try:
+                expanded = fn(*node.get("args", ()), **node.get("kwargs", {}))
+            finally:
+                arity_ok = (frame.index == len(slots)
+                            and frame.index == self._hooks_arity.setdefault(slot_id, frame.index))
+                _hooks.exit()
+            if not arity_ok:
+                raise RuntimeError(
+                    "hook count changed between renders: call hooks "
+                    "unconditionally in the same order every render")
+            self._hooks_visited.add(slot_id)
+            return self._expand(expanded, path)
+        if isinstance(node, dict):
+            out = dict(node)
+            children = out.get("children")
+            if isinstance(children, list):
+                out["children"] = [self._expand(c, f"{path}.{i}")
+                                   for i, c in enumerate(children)]
+            return out
+        if isinstance(node, list):
+            return [self._expand(c, f"{path}.{i}") for i, c in enumerate(node)]
+        return node
 
     def _serialize(self, node: Any, path: str) -> None:
         if not isinstance(node, dict):

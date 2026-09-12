@@ -1,21 +1,23 @@
 """Declarative element constructors. No VDOM dependency."""
 from __future__ import annotations
+import functools
 from typing import Any, Callable
 
 
 def component(fn=None, *, key_arg: str | None = None):
-    """Mark a function/class-method as a component. Keeps reactpy feel.
-    Usage:
-      @component
-      def MyPanel(state): ...
-      class P:
-        @component
-        def render(self, state): ...
+    """Declare a component. Calling it returns a lazy node that Layout
+    expands with per-instance hook state (keyed by key=, else position).
     """
     def wrap(f):
-        f._is_flyrail_component = True
-        f._key_arg = key_arg
-        return f
+        @functools.wraps(f)
+        def invoke(*args, **kwargs):
+            key = kwargs.pop("key", None)
+            return {"type": "__Component__", "fn": f, "key": key,
+                    "args": args, "kwargs": kwargs}
+        invoke._is_flyrail_component = True
+        invoke._key_arg = key_arg
+        invoke._component_fn = f
+        return invoke
     return wrap(fn) if fn else wrap
 
 

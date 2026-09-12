@@ -1,0 +1,107 @@
+"""Minimal React-style hooks for component-local UI state. Sync only.
+
+Rules (React's, enforced by convention + loud errors):
+- call hooks unconditionally at the top of a @component body, same order
+  every render;
+- never call hooks outside a @component body;
+- give repeated components distinct key= values.
+
+Renders are assumed serial (one tick loop / one async loop per Layout);
+concurrent renders from multiple threads are not supported.
+"""
+from __future__ import annotations
+from typing import Any, Callable
+
+_active: list = []  # stack of _Frame; innermost last
+
+
+class _Frame:
+    __slots__ = ("slots", "index", "schedule")
+
+    def __init__(self, slots: list, schedule: Callable[[], None]):
+        self.slots = slots
+        self.index = 0
+        self.schedule = schedule
+
+
+def enter(slots: list, schedule: Callable[[], None]) -> _Frame:
+    frame = _Frame(slots, schedule)
+    _active.append(frame)
+    return frame
+
+
+def exit() -> None:
+    if not _active:
+        raise RuntimeError("hook frames unbalanced (concurrent renders?)")
+    _active.pop()
+
+
+def _frame() -> _Frame:
+    if not _active:
+        raise RuntimeError("hooks may only be called inside a @component body")
+    return _active[-1]
+
+
+def use_state(initial: Any = None):
+    """Component-local state. Returns (value, setter).
+
+    Setter accepts a value or an updater fn. Re-renders are scheduled via
+    Layout.invalidate; identical values skip the schedule. Initializer
+    callables run once (to store a function itself, wrap it in lambda).
+    """
+    frame = _frame()
+    i = frame.index
+    frame.index += 1
+    if i >= len(frame.slots):
+        frame.slots.append(["state", initial() if callable(initial) else initial])
+    cell = frame.slots[i]
+    if cell[0] != "state":
+        raise RuntimeError(
+            "hook order changed between renders: call hooks unconditionally "
+            "in the same order every render")
+    def set_state(new: Any) -> None:
+        old = cell[1]
+        nxt = new(old) if callable(new) else new
+        try:
+            changed = bool(nxt != old)
+        except Exception:
+            changed = True
+        if changed:
+            cell[1] = nxt
+            frame.schedule()
+    return cell[1], set_state
+
+
+def use_memo(fn: Callable[[], Any], deps: list | tuple):
+    """Cached derived value; recomputed only when deps change."""
+    frame = _frame()
+    i = frame.index
+    frame.index += 1
+    if i >= len(frame.slots):
+        value = fn()
+        frame.slots.append(["memo", list(deps), value])
+        return value
+    cell = frame.slots[i]
+    if cell[0] != "memo":
+        raise RuntimeError(
+            "hook order changed between renders: call hooks unconditionally "
+            "in the same order every render")
+    if _deps_changed(cell[1], deps):
+        cell[1] = list(deps)
+        cell[2] = fn()
+    return cell[2]
+
+
+def _deps_changed(old: list, new: list | tuple) -> bool:
+    new = list(new)
+    if len(old) != len(new):
+        return True
+    for a, b in zip(old, new):
+        if a is b:
+            continue
+        try:
+            if a != b:
+                return True
+        except Exception:
+            return True  # exotic values (ndarray): recompute rather than lie
+    return False

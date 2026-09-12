@@ -93,6 +93,10 @@ ws.onmessage = (e) => store.ingest(JSON.parse(e.data));
 9. **Mark renders `@pure`, version host state.** Pure renders skip render
    CPU when the version is unchanged (unmarked always re-render: correct by
    default). `strict=True` double-renders in dev to catch nondeterminism.
+10. **Component-local UI state via hooks.** `use_state`/`use_memo` inside
+    `@component` bodies keeps collapsed flags and drafts out of tick state;
+    setters schedule through `invalidate()`. Distinct `key=` per instance,
+    hooks unconditional and order-stable, or it raises loudly.
 
 ## Layout
 
