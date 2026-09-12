@@ -2,6 +2,7 @@
 from __future__ import annotations
 import copy
 import hashlib
+import inspect
 import json
 from typing import Any, Callable
 
@@ -203,7 +204,24 @@ class Layout:
         fn = self.registry.get(handler_id)
         if fn is None:
             raise KeyError(f"unknown handler {handler_id!r}")
-        fn(state, event)
+        res = fn(state, event)
+        if inspect.isawaitable(res):
+            if inspect.iscoroutine(res):
+                res.close()
+            raise RuntimeError(
+                f"handler {handler_id!r} is async; use await adispatch() "
+                "instead of dispatch()")
+
+    async def adispatch(self, handler_id: str, state: Any, event: Any = None) -> Any:
+        """Dispatch both sync and async handlers; awaits awaitables.
+        Async-host pattern: await layout.adispatch(...) then invalidate()."""
+        fn = self.registry.get(handler_id)
+        if fn is None:
+            raise KeyError(f"unknown handler {handler_id!r}")
+        res = fn(state, event)
+        if inspect.isawaitable(res):
+            res = await res
+        return res
 
     def set_slot(self, name: str, value: Any) -> dict | None:
         """Hot path bypassing the diff: unchanged values return None."""

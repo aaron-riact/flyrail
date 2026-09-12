@@ -97,6 +97,10 @@ ws.onmessage = (e) => store.ingest(JSON.parse(e.data));
     `@component` bodies keeps collapsed flags and drafts out of tick state;
     setters schedule through `invalidate()`. Distinct `key=` per instance,
     hooks unconditional and order-stable, or it raises loudly.
+11. **Async handlers via `adispatch`.** Handlers may be `async def` (e.g.
+    `await db.save()` on click); sync `dispatch` refuses them loudly instead
+    of silently dropping the coroutine. Pattern: `await adispatch(...)`,
+    then `invalidate()`.
 
 ## Layout
 
