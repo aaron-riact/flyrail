@@ -125,12 +125,20 @@ if env := driver.flush(state):
     of silently dropping the coroutine. Pattern: `await adispatch(...)`,
     then `invalidate()`.
 
+## Docs
+
+- [How it works](docs/how-it-works.md) — architecture, tick/action/resync
+  sequences, render pipeline, hook slots, scheduling, message catalog.
+
 ## Layout
 
 ```
 flyrail/          Python core (stdlib only)
-  core.py         Stack/Text/Button/TextField/Slot, @component
+  core.py         Stack/Text/Button/TextField/Slot, @component, @pure
+  hooks.py        use_state/use_memo keyed slots
   layout.py       registry + diff + dispatch + slots + snapshot
+  driver.py       dirty-flag scheduling for tick/async/naive hosts
+  asgi.py         framework-free websocket sessions
   transport.py    multiplex envelope + tick sketch
 js/               flyrail-renderer (zero-dep ESM + tsx)
   protocol.mjs    envelopes, applyOps, debounce (node-tested)
@@ -143,16 +151,17 @@ tests/            focused unittest suites + public-API loopback
 ## Tests
 
 ```
-PYTHONPATH=. python3 -m unittest discover -s tests -v   # 32 tests
-node --test js/protocol.test.mjs js/store.test.mjs      # 17 tests
+PYTHONPATH=. python3 -m unittest discover -s tests -v   # 67 tests
+node --test js/protocol.test.mjs js/store.test.mjs      # 24 tests
 PYTHONPATH=. python3 example/hmi_demo.py                 # narrated wire demo
 ```
 
 ## Non-goals / roadmap
 
 - Not a form validator (use your backend validation + error slots), not a
-  JSON-Schema renderer (see rjsf), not a full reactpy replacement (no hooks;
-  tick state replaces `use_state`).
+  JSON-Schema renderer (see rjsf), not a full reactpy replacement (sync
+  core with no async effects; bring your own frontend instead of an
+  owned tree).
 - Roadmap: vitest + React Testing Library for `ServerNode`, `byId/order`
   maps for huge reorderable lists, keystroke `ackSeq` if loss-less input sync
   is ever needed, registry packaging.
