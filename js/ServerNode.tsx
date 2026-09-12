@@ -1,6 +1,10 @@
 import * as React from 'react';
 import {
   createChangeSender,
+  createThrottledChangeSender,
+  shouldPreventDefault,
+  shouldStopPropagation,
+  throttle,
   actionMessage,
   childKey,
   isKnownComponent,
@@ -42,8 +46,13 @@ export function createRenderer(registry: Record<string, any>) {
   function ServerNode({ node, send }: { node: any; send: (msg: any) => void }) {
     // First line, before any early return: hooks must run unconditionally.
     const senderRef = React.useRef<{
-      hid: string;
-      sender: ReturnType<typeof createChangeSender>;
+      key: string;
+      api: ReturnType<typeof createChangeSender>;
+    } | null>(null);
+    const clickRef = React.useRef<{
+      key: string;
+      send: () => void;
+      cancel: () => void;
     } | null>(null);
     if (!node) return null;
     if (node.type === '__Slot__') {
@@ -54,20 +63,51 @@ export function createRenderer(registry: Record<string, any>) {
     const props: any = normalizeButtonProps(node.props, Comp === registry['Button']);
     // python on_click/on_change -> react onClick/onChange carrying handlerId
     if (node.on_click) {
-      const hid = node.on_click.handlerId;
-      props.onClick = () => send(actionMessage(hid));
+      const entry = node.on_click;
+      const hid = entry.handlerId;
+      const t = entry.throttleMs;
+      // Optional leading-edge throttle doubles as a double-submit guard.
+      const key = `${hid}|${t ?? "direct"}`;
+      if (!clickRef.current || clickRef.current.key !== key) {
+        clickRef.current?.cancel();
+        const sendNow = () => send(actionMessage(hid));
+        const gated =
+          typeof t === "number" ? throttle(sendNow, t, { trailing: false }) : sendNow;
+        clickRef.current = {
+          key,
+          send: gated,
+          cancel: () => (gated as { cancel?: () => void }).cancel?.(),
+        };
+      }
+      props.onClick = (e: any) => {
+        if (shouldPreventDefault(entry)) e.preventDefault();
+        if (shouldStopPropagation(entry)) e.stopPropagation();
+        clickRef.current!.send();
+      };
     }
     if (node.on_change) {
-      const hid = node.on_change.handlerId;
-      // One debounced sender per input: sharing across fields would let
-      // concurrent edits clobber each other. Recreate on handlerId change
-      // (list reorder) so strokes never route to a stale row.
-      if (!senderRef.current || senderRef.current.hid !== hid) {
-        senderRef.current?.sender.cancel();
-        senderRef.current = { hid, sender: createChangeSender(send) };
+      const entry = node.on_change;
+      const hid = entry.handlerId;
+      const t = entry.throttleMs;
+      // One sender per input: sharing across fields would let concurrent
+      // edits clobber each other. Recreate on handlerId or mode change
+      // (list reorder) so strokes never route to a stale row. Sliders opt
+      // into throttleMs; everything else keeps the 150ms debounce.
+      const key = `${hid}|${t ?? "debounce"}`;
+      if (!senderRef.current || senderRef.current.key !== key) {
+        senderRef.current?.api.cancel();
+        const api =
+          typeof t === "number"
+            ? createThrottledChangeSender(send, t)
+            : createChangeSender(send);
+        senderRef.current = { key, api };
       }
-      const sender = senderRef.current.sender;
-      props.onChange = (e: any) => sender.send(hid, e?.target?.value);
+      const api = senderRef.current.api;
+      props.onChange = (e: any) => {
+        if (shouldPreventDefault(entry)) e.preventDefault();
+        if (shouldStopPropagation(entry)) e.stopPropagation();
+        api.send(hid, e?.target?.value);
+      };
     }
     const children = (node.children || []).map((c: any, i: number) => {
       if (typeof c === 'string') return <React.Fragment key={i}>{c}</React.Fragment>;

@@ -86,6 +86,10 @@ ws.onmessage = (e) => store.ingest(JSON.parse(e.data));
    store drops stale/duplicates and answers gaps with one snapshot round-trip.
 7. **Keep `render(state)` pure and cheap.** No DB, no IO: derive from the
    already-computed tick state. One `Layout` per session.
+8. **Safe event defaults, names like the DOM.** `preventDefault` is true
+   unless opted out (a reload is session death); `stopPropagation` stays
+   opt-in; `throttleMs` rate-caps sliders and guards double-submit. Same
+   names as the browser, defaults chosen for the socket.
 
 ## Layout
 

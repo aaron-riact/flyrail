@@ -12,6 +12,10 @@ import {
   parsePointer,
   debounce,
   createChangeSender,
+  createThrottledChangeSender,
+  shouldPreventDefault,
+  shouldStopPropagation,
+  throttle,
 } from "./protocol.mjs";
 
 test("click action omits event when absent", () => {
@@ -98,6 +102,44 @@ test("change sender wraps debounced input values", async () => {
       event: { value: "hi" },
     },
   ]);
+});
+
+test("policy helpers default safe for missing descriptors", () => {
+  assert.equal(shouldPreventDefault(undefined), true);
+  assert.equal(shouldPreventDefault({}), true);
+  assert.equal(shouldPreventDefault({ preventDefault: false }), false);
+  assert.equal(shouldStopPropagation(undefined), false);
+  assert.equal(shouldStopPropagation({ stopPropagation: true }), true);
+});
+
+test("throttle sends leading immediately, trailing latest once", async () => {
+  const calls = [];
+  const fn = throttle((v) => calls.push(v), 20);
+  fn("a");
+  assert.deepEqual(calls, ["a"]);
+  fn("b");
+  fn("c");
+  await new Promise((r) => setTimeout(r, 40));
+  assert.deepEqual(calls, ["a", "c"]);
+});
+
+test("throttle trailing:false drops in-window repeats (double-submit guard)", async () => {
+  const calls = [];
+  const fn = throttle((v) => calls.push(v), 20, { trailing: false });
+  fn("a");
+  fn("b");
+  await new Promise((r) => setTimeout(r, 40));
+  assert.deepEqual(calls, ["a"]);
+});
+
+test("throttled change sender streams latest slider values", async () => {
+  const sent = [];
+  const sender = createThrottledChangeSender((m) => sent.push(m), 10);
+  sender.send("0.2:on_change:s", 1);
+  sender.send("0.2:on_change:s", 2);
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(sent.length, 2); // leading 1 + trailing latest 2
+  assert.equal(sent[1].event.value, 2);
 });
 
 test("pointer unescapes ~0/~1 and addresses root", () => {

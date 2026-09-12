@@ -11,8 +11,11 @@ descriptors to real components. No switch statement: with
   non-function MUI exports like `colors`).
 - `key` comes from Python `key=` (stable item id). Reorders therefore
   reconcile client-side without remounts or focus loss.
-- `on_click` / `on_change` carry `{handlerId}`; clicks send
-  `{chan:'ui', type:'action', handlerId}`, inputs add `event:{value}`.
+- `on_click` / `on_change` carry `{handlerId, preventDefault,
+  stopPropagation, throttleMs?}`; clicks send `{chan:'ui', type:'action',
+  handlerId}`, inputs add `event:{value}`. `preventDefault` is true unless
+  the descriptor opts out; inputs debounce at 150ms unless `throttleMs`
+  selects slider-style throttling (leading + trailing latest).
 - `__Slot__` nodes subscribe by name; tick-rate values arrive as
   `{chan:'ui', type:'slot'}` and update without a tree patch.
 - For prod bundles prefer an explicit allowlist

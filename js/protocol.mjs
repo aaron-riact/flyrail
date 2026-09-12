@@ -79,6 +79,67 @@ export function createChangeSender(send, waitMs = 150) {
   };
 }
 
+export function createThrottledChangeSender(send, waitMs) {
+  // Slider-style inputs: intermediate values matter, but not at 60Hz.
+  // Leading call sends immediately, later calls collapse to the trailing latest.
+  const throttled = throttle((hid, value) => send(changeMessage(hid, value)), waitMs);
+  return {
+    send: (hid, value) => throttled(hid, value),
+    flush: () => throttled.flush(),
+    cancel: () => throttled.cancel(),
+  };
+}
+
+export function shouldPreventDefault(entry) {
+  // Policy mirror of Layout.EVENT_DEFAULTS: a socket-driven control never
+  // triggers browser navigation unless the descriptor explicitly opts out.
+  // Applied synchronously in the React handler (a debounced callback can no
+  // longer cancel the event) and defaults safe for hand-built trees.
+  return entry?.preventDefault !== false;
+}
+
+export function shouldStopPropagation(entry) {
+  return entry?.stopPropagation === true;
+}
+
+export function throttle(fn, waitMs, { trailing = true } = {}) {
+  let lastCall = 0;
+  let timer = null;
+  let lastArgs = null;
+  function throttled(...args) {
+    const now = Date.now();
+    const remaining = waitMs - (now - lastCall);
+    lastArgs = args;
+    if (remaining <= 0) {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      lastCall = now;
+      fn(...args);
+    } else if (trailing && !timer) {
+      timer = setTimeout(() => {
+        timer = null;
+        lastCall = Date.now();
+        fn(...lastArgs);
+      }, remaining);
+    }
+  }
+  throttled.cancel = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+  };
+  throttled.flush = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+      lastCall = Date.now();
+      fn(...lastArgs);
+    }
+  };
+  return throttled;
+}
+
 export function parsePointer(path) {
   // RFC6901 with our convention: "" and "/" both address the document root.
   if (path === "" || path === "/") return [];
