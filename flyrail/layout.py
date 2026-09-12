@@ -14,6 +14,13 @@ def _escape(path: str) -> str:
     return path.replace("~", "~0").replace("/", "~1")
 
 
+#: Wire defaults for event descriptors. preventDefault is True because a
+#: socket-driven control must never trigger browser navigation (reload =
+#: dead session); opt out explicitly with prevent_default=False. Shape
+#: mirrors reactpy's eventHandlers entries for cross-compat.
+EVENT_DEFAULTS = {"preventDefault": True, "stopPropagation": False}
+
+
 def _diff(old: Any, new: Any, path: str = "") -> list[dict]:
     """Minimal RFC6902 diff. Dicts recurse; lists replace wholesale (React
     reconciles arrays via `key` client-side, so index patches would be waste).
@@ -74,7 +81,9 @@ class Layout:
                 # across list reorders (client reconciles via `key` too).
                 hid = f"{path}:{evt}:{key}"
                 self.registry[hid] = fn
-                node[evt] = {"handlerId": hid}
+                node[evt] = {"handlerId": hid,
+                             **{**EVENT_DEFAULTS,
+                                **node.get("event_options", {}).get(evt, {})}}
         for i, c in enumerate(node.get("children", []) or []):
             self._serialize(c, f"{path}.{i}")
 
