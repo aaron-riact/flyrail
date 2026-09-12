@@ -19,6 +19,19 @@ def component(fn=None, *, key_arg: str | None = None):
     return wrap(fn) if fn else wrap
 
 
+def pure(fn=None):
+    """Opt-in contract: output is a pure function of (arguments, hook slots).
+
+    Declares, not verifies: Layout may skip re-renders when the host version
+    is unchanged, and strict mode double-renders to spot-check. Unmarked
+    renders always re-render. If you lie, the stale UI is your bug.
+    """
+    def wrap(f):
+        f._flyrail_pure = True
+        return f
+    return wrap(fn) if fn else wrap
+
+
 def _opts(event: str, prevent_default: bool, stop_propagation: bool,
           throttle_ms: int | None) -> dict:
     """Per-event wire options. throttleMs is omitted when unset (minimal wire)."""

@@ -90,6 +90,9 @@ ws.onmessage = (e) => store.ingest(JSON.parse(e.data));
    unless opted out (a reload is session death); `stopPropagation` stays
    opt-in; `throttleMs` rate-caps sliders and guards double-submit. Same
    names as the browser, defaults chosen for the socket.
+9. **Mark renders `@pure`, version host state.** Pure renders skip render
+   CPU when the version is unchanged (unmarked always re-render: correct by
+   default). `strict=True` double-renders in dev to catch nondeterminism.
 
 ## Layout
 

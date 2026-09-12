@@ -53,13 +53,22 @@ class Layout:
     values past the diff entirely.
     """
 
-    def __init__(self, render_fn: Callable[[Any], dict], allowed_types: set[str] | None = None):
+    def __init__(self, render_fn: Callable[[Any], dict], allowed_types: set[str] | None = None,
+                 strict: bool = False):
         self.render_fn = render_fn
         self.allowed_types = allowed_types
+        self.strict = strict
         self.registry: dict[str, Callable] = {}
         self._last_tree: Any = None
         self._last_hash: str | None = None
         self._slots: dict[str, Any] = {}
+        self._version: Any = None
+        self._dirty = True
+
+    def invalidate(self) -> None:
+        """Mark dirty: the next tick() re-renders regardless of version.
+        Scheduling seam for hook dispatch and the future Driver."""
+        self._dirty = True
 
     def render(self, state: Any) -> dict:
         self.registry.clear()
@@ -68,7 +77,22 @@ class Layout:
         self._serialize(tree, path="0")
         if self.allowed_types:
             self._check_allowlist(tree)
+        if self.strict and getattr(self.render_fn, "_flyrail_pure", False):
+            self._check_deterministic(state, tree)
+        self._dirty = False
         return tree
+
+    def _check_deterministic(self, state: Any, first: dict) -> None:
+        # Compare serialized trees: raw trees hold fresh closures per render
+        # (identity-unequal by construction), while handlerIds are
+        # deterministic. Second pass overwrites identical registry entries.
+        again = copy.deepcopy(self.render_fn(state))
+        self._serialize(again, path="0")
+        if again != first:
+            raise AssertionError(
+                "render_fn marked @pure produced different trees across two "
+                "immediate renders; remove @pure or eliminate the "
+                "nondeterminism (time, random, counters, unversioned reads)")
 
     def _serialize(self, node: Any, path: str) -> None:
         if not isinstance(node, dict):
@@ -105,9 +129,18 @@ class Layout:
         self._last_hash = h
         return ops
 
-    def tick(self, state: Any) -> list[dict]:
-        """Convenience for fixed-tick loops: render + diff."""
-        return self.diff_and_commit(self.render(state))
+    def tick(self, state: Any, version: Any = None) -> list[dict]:
+        """Render + diff. Pure renders skip render CPU when the host version
+        matches the last rendered version and nothing invalidated since.
+        Unmarked renders always re-render (correct by default)."""
+        if (version is not None
+                and version == self._version
+                and not self._dirty
+                and getattr(self.render_fn, "_flyrail_pure", False)):
+            return []
+        tree = self.render(state)
+        self._version = version
+        return self.diff_and_commit(tree)
 
     def snapshot(self, state: Any, seq: int) -> dict:
         """Full-tree recovery message answering a client resync-request.
