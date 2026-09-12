@@ -6,5 +6,6 @@ Python API is reactpy-style but transport/V DOM agnostic:
 """
 from .core import component, pure, Slot, Stack, Text, Button, TextField
 from .layout import Layout
+from .driver import Driver
 
-__all__ = ["component", "pure", "Slot", "Stack", "Text", "Button", "TextField", "Layout"]
+__all__ = ["component", "pure", "Slot", "Stack", "Text", "Button", "TextField", "Layout", "Driver"]
