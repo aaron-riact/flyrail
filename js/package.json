@@ -1,5 +1,5 @@
 {
-  "name": "pyforms-renderer",
+  "name": "flyrail-renderer",
   "version": "0.1.0",
   "description": "BYOF renderer: server-driven component trees over your own websocket",
   "type": "module",

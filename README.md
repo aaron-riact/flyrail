@@ -1,4 +1,4 @@
-# pyforms
+# flyrail
 
 Bring-your-own-frontend server-driven UI with a reactpy-style Python API.
 Python declares the UI, your React+MUI app renders it, your socket carries
@@ -7,11 +7,11 @@ it, your tick drives it.
 ## Why this exists
 
 `reactpy` owns the whole React tree and its own socket protocol. `rjsf`
-owns form rendering but not arbitrary layouts. pyforms splits the problem:
+owns form rendering but not arbitrary layouts. flyrail splits the problem:
 
-- **Python** (`pyforms/`): declarative element helpers, per-session handler
+- **Python** (`flyrail/`): declarative element helpers, per-session handler
   registry, hash-gated diffing, slot fast-path. Zero dependencies.
-- **JS** (`js/`, `pyforms-renderer`): namespace component registry
+- **JS** (`js/`, `flyrail-renderer`): namespace component registry
   (`import * as MUI`), patch applier, client store with resync, debounced
   inputs. Zero dependencies (React is a peer).
 
@@ -27,8 +27,8 @@ gap:    seq skip -> resync-request -> snapshot(state, seq) -> {chan:ui,type:snap
 ## Python quickstart
 
 ```python
-from pyforms import Layout, Stack, Text, Button
-from pyforms.transport import ui_envelope_patch
+from flyrail import Layout, Stack, Text, Button
+from flyrail.transport import ui_envelope_patch
 
 class Panel:
     def render(self, s):
@@ -58,8 +58,8 @@ def on_ws(msg, state):
 
 ```tsx
 import * as MUI from '@mui/material';
-import { createRenderer } from 'pyforms-renderer';
-import { createStore } from 'pyforms-renderer/store';
+import { createRenderer } from 'flyrail-renderer';
+import { createStore } from 'flyrail-renderer/store';
 
 const { ServerNode } = createRenderer({ ...MUI });  // auto-registered, no switch
 const store = createStore({ onResync: (req) => ws.send(JSON.stringify(req)) });
@@ -90,11 +90,11 @@ ws.onmessage = (e) => store.ingest(JSON.parse(e.data));
 ## Layout
 
 ```
-pyforms/          Python core (stdlib only)
+flyrail/          Python core (stdlib only)
   core.py         Stack/Text/Button/TextField/Slot, @component
   layout.py       registry + diff + dispatch + slots + snapshot
   transport.py    multiplex envelope + tick sketch
-js/               pyforms-renderer (zero-dep ESM + tsx)
+js/               flyrail-renderer (zero-dep ESM + tsx)
   protocol.mjs    envelopes, applyOps, debounce (node-tested)
   store.mjs       seq tracking, gap->resync, slots (node-tested)
   ServerNode.tsx  MUI-bound renderer (imports protocol.mjs)

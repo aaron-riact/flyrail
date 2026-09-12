@@ -1,4 +1,4 @@
-// Framework-free client store for pyforms trees.
+// Framework-free client store for flyrail trees.
 // Ingests the multiplexed {chan:"ui"} messages (patch/slot/snapshot),
 // tracks seq for gap detection, and notifies subscribers. React binding
 // is a thin useSyncExternalStore wrapper (see ServerNode docs); all logic

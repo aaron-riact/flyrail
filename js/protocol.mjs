@@ -1,4 +1,4 @@
-// Pure wire-protocol helpers for the pyforms renderer.
+// Pure wire-protocol helpers for the flyrail renderer.
 // No React, no MUI: unit-testable with `node --test` and imported by
 // ServerNode.tsx so the tested code IS the shipped code.
 

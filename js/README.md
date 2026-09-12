@@ -1,4 +1,4 @@
-# pyforms renderer (JS side)
+# flyrail renderer (JS side)
 
 `createRenderer(registry)` maps Python `{type, props, children, key}`
 descriptors to real components. No switch statement: with
