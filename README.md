@@ -67,6 +67,29 @@ ws.onmessage = (e) => store.ingest(JSON.parse(e.data));
 // render store.getTree() via <ServerNode node={tree} send={...} />
 ```
 
+## Hosting (pick one)
+
+```python
+# 1. Fixed tick you own: Driver replaces the hand-rolled seq counter.
+from flyrail import Driver
+driver = Driver(layout)
+def on_tick(state, version):
+    if env := driver.flush(state, version):
+        broadcast(env)
+
+# 2. Async host: raw ASGI app, one session per connection. FastAPI:
+#    from fastapi import WebSocket; await create_ws_app(Panel().render)(scope, receive, send)
+#    (or mount in any ASGI framework; no fastapi dependency in this package)
+from flyrail import create_ws_app
+app = create_ws_app(Panel().render, state_factory=Sim,
+                    on_message=lambda data, state: handle_telemetry(data))
+
+# 3. Naive host (no loop at all): invalidate + flush around every message.
+driver.invalidate()
+if env := driver.flush(state):
+    send(env)
+```
+
 ## Best practices
 
 1. **Stable keys, never indexes.** `key=item.id` on every list child, both
