@@ -11,7 +11,7 @@ version of the same flows.
 flowchart LR
     SIM["host state<br/>(sim snapshot, db row, script arg)"]
     LAY["Layout<br/>render + serialize"]
-    DIFF["diff + hash gate"]
+    DIFF["gates + diff"]
     SOCK["your socket<br/>chan ui"]
     STORE["createStore<br/>seq + slots"]
     MUI["ServerNode<br/>MUI registry"]
@@ -48,7 +48,7 @@ sequenceDiagram
     alt "pure, same version, clean"
         L-->>T: "empty (no render)"
     else "rendered"
-        L->>L: "expand, serialize, hash"
+        L->>L: "expand (memo), serialize (cache)"
         alt "tree unchanged"
             L-->>T: "empty (no send)"
         else "changed"
@@ -60,12 +60,25 @@ sequenceDiagram
     end
 ```
 
-Two independent gates: version-skip saves render CPU, the hash gate saves
-socket traffic. Either can fire alone (see the `invalidate` test: re-render
-with nothing to send). Version-skipping applies to renders marked `@pure`
-(a declared contract: output is a pure function of arguments); unmarked
-renders always re-render, and `strict=True` double-renders in dev to catch
-nondeterminism.
+Four gates, tried cheapest first, saving different things. **Version-skip**
+avoids the render outright when the host passes an unchanged token and the
+root is `@pure`. **Memoisation** skips the body of any `@pure` component whose
+arguments are unchanged and under which nothing went stale, so a moved token
+still only re-runs what moved. **Identity** settles the diff with one `is` when
+a render reused every subtree it had. **Compare** is the backstop: an `==`
+against the committed tree, needing no cooperation at all.
+
+Any of them can fire alone (see the `invalidate` test: re-render with nothing
+to send). `@pure` is a declared contract — output is a function of arguments
+and hook slots — and is what opts a component into the first two. Unmarked
+components always re-render, so this is correct by default, and `strict=True`
+double-renders in dev to catch nondeterminism (it also disables reuse, since a
+cache would quietly turn the double-render into one).
+
+The compare is a compare, not a digest: the committed tree is retained anyway
+to diff against, so comparing it costs less than hashing it and cannot collide
+— which a digest over `json.dumps(default=str)` could, silently dropping an
+update between two values that stringified alike.
 
 ## Cold path vs hot path
 
@@ -75,7 +88,7 @@ flowchart TD
     Q -- "rare, structural" --> C["render tree, diff, patch"]
     Q -- "every tick, values" --> H["Slot + set_slot"]
     C --> P["patch envelope, seq"]
-    H --> SL["slot envelope, hash dedupe"]
+    H --> SL["slot envelope, compare dedupe"]
 ```
 
 Rule of thumb: structure goes through patches, values through slots. A
@@ -134,18 +147,24 @@ flowchart TD
     R["render_fn(state)"]
     E["expand components<br/>(hook slots by fn + key)"]
     G["prune unvisited slots"]
-    D["deepcopy"]
     Z["serialize callables<br/>to handlerId descriptors"]
     A["allowlist check"]
     T["strict double-render"]
+    X["run effects"]
     F["diff_and_commit"]
-    R --> E --> G --> D --> Z --> A --> T --> F
+    R --> E --> G --> Z --> A --> T --> X --> F
 ```
 
-Expansion happens before deepcopy so hook bodies run once per render;
-serialization replaces each callable with `{handlerId, preventDefault,
-stopPropagation, throttleMs?}`; the allowlist rejects unknown node types
+Expansion reuses the cached subtree of any memoised component rather than
+running its body. Serialization replaces each callable with `{handlerId,
+preventDefault, stopPropagation, throttleMs?}` and returns the node it was
+given wherever nothing changed, so untouched subtrees keep their identity; a
+memoised subtree reuses its serialized form too and replays its registry
+entries, since the registry is rebuilt from nothing each render. There is no
+deepcopy in this path — serialization used to mutate a copy of the whole tree,
+which cost more than the diff it fed. The allowlist rejects unknown node types
 on both ends (`__Slot__` exempt, `__Component__` never survives expansion).
+Effects run once the tree is built, children before parents.
 
 ## Hook slots
 
@@ -156,7 +175,7 @@ flowchart TD
     N["seen this render?"]
     N -- "no, first mount" --> I["init slots"]
     N -- "yes" --> R["reuse slots by call order"]
-    I --> H["run body<br/>use_state, use_memo"]
+    I --> H["run body<br/>use_state, use_memo, use_effect"]
     R --> H
     H --> K["arity check"]
     K -- "same count" --> V["mark visited"]
@@ -164,9 +183,15 @@ flowchart TD
     V --> U["unvisited pruned<br/>at end of render"]
 ```
 
-Keys follow reorders, positions behave React-like. Setters bail out on
-identical values and schedule through `invalidate()`; `use_memo` recomputes
-only on dep change (exotic values recompute rather than lie).
+Keys follow reorders, positions behave React-like. The frame stack is
+thread-local, so two Layouts driven from two threads cannot reach each other's
+slots. Setters bail out on identical values and schedule that component's slot
+alone rather than the whole layout, which is what makes per-component
+memoisation possible; `use_memo` recomputes only on dep change (exotic values
+recompute rather than lie). `use_effect` runs after the render commits and its
+cleanup runs before the effect runs again and once when the component is
+pruned. A reused subtree reports itself as still mounted, or the prune would
+collect its hooks and the component would silently restart.
 
 ## Scheduling across hosts
 

@@ -12,6 +12,7 @@ WIRE_TOKENS = [
     "patch", "slot", "snapshot", "action", "resync-request",
     "handlerId", "seq", "ops", "tree",
     "applyOps", "invalidate", "use_state", "@pure", "adispatch",
+    "use_effect", "use_memo", "memoisation", "identity",
 ]
 
 
