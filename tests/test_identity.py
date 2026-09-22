@@ -168,7 +168,7 @@ class IdentityTest(unittest.TestCase):
 
         moved = second["children"][0]
         self.assertIsNot(moved, first["children"][1])
-        self.assertEqual(moved["on_click"]["handlerId"], "0.0:on_click:")
+        self.assertEqual(moved["on_click"]["handlerId"], "0.#0:on_click:")
 
     def test_diff_and_commit_short_circuits_on_identity(self):
         layout = Layout(Board)

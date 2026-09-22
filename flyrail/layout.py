@@ -42,12 +42,19 @@ def _segment(child: Any, index: int) -> Any:
     Position alone made a handler id move when its siblings did, so a click on
     a row that had shifted up reached whatever now sat where it used to. A key
     is exactly the promise that this element is the same element, so use it.
+
+    The two must never spell the same segment: an unkeyed child at index 0
+    and a sibling keyed 0 would otherwise share every descendant's handler id.
+    An index is written "#0"; a key is escaped so it can hold neither "#" nor
+    the "." and ":" that delimit an id. str(key) is the identity, as it is for
+    React, which would not tell 1 and "1" apart either.
     """
     if isinstance(child, dict):
         key = child.get("key")
         if key is not None:
-            return key
-    return index
+            return (str(key).replace("~", "~0").replace(".", "~1")
+                    .replace(":", "~2").replace("#", "~3"))
+    return f"#{index}"
 
 
 def _escape(path: str) -> str:

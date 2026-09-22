@@ -25,7 +25,30 @@ class SerializeTest(unittest.TestCase):
     def test_a_keyless_child_still_falls_back_to_its_index(self):
         layout = Layout(lambda s: Stack(Button("A", on_click=lambda s, e: None)))
         tree = layout.render({})
-        self.assertEqual(tree["children"][0]["on_click"]["handlerId"], "0.0:on_click:")
+        self.assertEqual(tree["children"][0]["on_click"]["handlerId"], "0.#0:on_click:")
+
+    def test_an_index_never_names_the_same_place_as_a_key(self):
+        """An unkeyed child at index 0 and a sibling keyed 0 used to share a
+        path segment, so their descendants' handler ids collided and one
+        button's click ran the other's handler."""
+        clicked = []
+        layout = Layout(lambda s: Stack(
+            Stack(Button("A", on_click=lambda s, e: clicked.append("A"))),
+            Stack(Button("B", on_click=lambda s, e: clicked.append("B")), key=0)))
+        tree = layout.render({})
+
+        self.assertEqual(len(layout.registry), 2)
+        layout.dispatch(tree["children"][0]["children"][0]["on_click"]["handlerId"], {})
+        self.assertEqual(clicked, ["A"])
+
+    def test_a_key_cannot_forge_a_deeper_path(self):
+        """Keys are escaped, so a key holding the separators cannot spell out
+        the path of some other element."""
+        layout = Layout(lambda s: Stack(
+            Stack(Stack(Button("A", on_click=lambda s, e: None, key="c"), key="b"), key="a"),
+            Stack(Button("B", on_click=lambda s, e: None, key="c"), key="a.b")))
+        layout.render({})
+        self.assertEqual(len(layout.registry), 2)
 
     def test_registry_cleared_per_render(self):
         layout = Layout(lambda s: Stack(Button("A", on_click=lambda s, e: None)))
