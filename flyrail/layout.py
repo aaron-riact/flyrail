@@ -251,6 +251,10 @@ class Layout:
         self._effect_order: list = []
         self._version: Any = None
         self._dirty = True
+        #: Called when a hook's set_state marks the layout dirty, so a host
+        #: loop waiting for work hears about it. Driver installs its wake-up
+        #: here; without one a setter called outside a handler went unseen.
+        self.on_schedule: Callable[[], None] | None = None
 
     def invalidate(self) -> None:
         """Mark dirty: the next tick() re-renders regardless of version.
@@ -279,6 +283,8 @@ class Layout:
         """A hook in this component set new state: only it needs re-running."""
         self._dirty = True
         self._dirty_slots.add(slot_id)
+        if self.on_schedule is not None:
+            self.on_schedule()
 
     def render(self, state: Any) -> dict:
         self.registry.clear()

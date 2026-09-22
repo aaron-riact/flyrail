@@ -24,9 +24,14 @@ class Driver:
         #: the running loop from that thread finds none, and setting the Event
         #: directly from there neither is thread-safe nor wakes the loop.
         self._loop: asyncio.AbstractEventLoop | None = None
+        layout.on_schedule = self._wake
 
     def invalidate(self) -> None:
         self.layout.invalidate()
+        self._wake()
+
+    def _wake(self) -> None:
+        """Let run() know there is work, from whichever thread this is."""
         loop = self._loop
         if loop is None or loop.is_closed():
             self._event.set()  # nothing is waiting yet

@@ -81,6 +81,39 @@ class RunTest(unittest.IsolatedAsyncioTestCase):
             except asyncio.CancelledError:
                 pass
 
+    async def test_set_state_outside_a_handler_wakes_the_loop(self):
+        """A hook setter marked the layout dirty and nothing else, so a
+        set_state from a timer, a task or an effect never woke run() and sat
+        unrendered until something else called invalidate()."""
+        from flyrail import component, use_state
+
+        setters = []
+
+        @component
+        def Clock(_state):
+            now, set_now = use_state("12:00")
+            setters.append(set_now)
+            return Text(now)
+
+        d = Driver(Layout(Clock))
+        arrived = asyncio.get_running_loop().create_future()
+
+        async def send(env):
+            if not arrived.done():
+                arrived.set_result(env)
+
+        d.layout.snapshot(None, seq=0)  # first paint, as create_ws_app does
+        task = asyncio.create_task(d.run(lambda: None, send))
+        try:
+            await asyncio.sleep(0)
+            setters[-1]("12:01")  # no invalidate(): the hook has to do it
+
+            env = await asyncio.wait_for(arrived, timeout=1.0)
+            self.assertIn("12:01", repr(env["ops"]))
+        finally:
+            task.cancel()
+            await asyncio.wait({task}, timeout=1.0)
+
 
 class ThreadWakeTest(unittest.TestCase):
     def test_invalidate_from_another_thread_wakes_the_loop(self):
