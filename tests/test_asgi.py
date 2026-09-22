@@ -160,6 +160,60 @@ class AdapterTest(unittest.IsolatedAsyncioTestCase):
         await ch.wait_ui(2)
         await self.stop(task, ch)
 
+    async def test_a_render_error_is_logged_and_the_next_render_retries(self):
+        """The render loop runs as its own task. A render that raised ended
+        that task, the receive loop carried on, and the page looked connected
+        but never updated again -- even once the state that broke it moved."""
+        def fragile(s):
+            if s["v"] == 2:
+                raise ValueError("render bug")
+            return panel(s)
+
+        app = create_ws_app(fragile, state_factory=lambda: {"v": 1})
+        ch = Channel()
+        task = asyncio.create_task(app(SCOPE, ch.receive, ch.send))
+        await ch.wait_ui(1)
+        hid = ch.ui()[0]["tree"]["children"][1]["on_click"]["handlerId"]
+        click = {"type": "websocket.receive", "text": json.dumps(
+            {"chan": "ui", "type": "action", "handlerId": hid})}
+
+        with self.assertLogs("flyrail", "ERROR") as logs:
+            await ch.incoming.put(click)  # v -> 2: render raises
+            await asyncio.sleep(0.05)
+        self.assertIn("render bug", "\n".join(logs.output))
+
+        await ch.incoming.put(click)  # v -> 3: renders again
+        await ch.wait_ui(2)
+        self.assertIn("v=3", json.dumps(ch.ui()[1]["ops"]))
+        await self.stop(task, ch)
+
+    async def test_a_resync_that_fails_to_render_keeps_the_session(self):
+        state = {"v": 1}
+
+        def fragile(s):
+            if s["v"] == 2:
+                raise ValueError("render bug")
+            return panel(s)
+
+        app = create_ws_app(fragile, state_factory=lambda: state)
+        ch = Channel()
+        task = asyncio.create_task(app(SCOPE, ch.receive, ch.send))
+        await ch.wait_ui(1)
+        resync = {"type": "websocket.receive", "text": json.dumps(
+            {"chan": "ui", "type": "resync-request"})}
+
+        state["v"] = 2
+        with self.assertLogs("flyrail", "ERROR"):
+            await ch.incoming.put(resync)
+            await asyncio.sleep(0.05)
+        self.assertFalse(task.done(), "session ended on a failed resync")
+
+        state["v"] = 3
+        await ch.incoming.put(resync)
+        await ch.wait_ui(2)
+        self.assertEqual(ch.ui()[1]["seq"], 2, "the failed resync used up a seq")
+        await self.stop(task, ch)
+
     async def test_rejects_non_websocket_scope(self):
         ch = Channel()
         app = create_ws_app(panel)

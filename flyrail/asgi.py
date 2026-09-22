@@ -86,8 +86,15 @@ def create_ws_app(
                         log.exception("handler %r raised", hid)
                     driver.invalidate()
                 elif kind == "resync-request":
+                    try:
+                        snap = layout.snapshot(state, driver.seq + 1)
+                    except Exception:
+                        # As in Driver.run: log, keep the session, and let
+                        # the client ask again once the state has moved.
+                        log.exception("render failed answering a resync")
+                        continue
                     driver.seq += 1
-                    await send_json(layout.snapshot(state, driver.seq))
+                    await send_json(snap)
                 # Unknown ui subtypes ignored (forward-compat, mirrors store).
         finally:
             run_task.cancel()

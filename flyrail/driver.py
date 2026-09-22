@@ -1,9 +1,12 @@
 """Host scheduling seam: one primitive for tick, async, and naive hosts."""
 from __future__ import annotations
 import asyncio
+import logging
 from typing import Any, Callable
 
 from .layout import Layout
+
+log = logging.getLogger("flyrail")
 
 
 class Driver:
@@ -59,11 +62,21 @@ class Driver:
         send: Callable[[dict], Any],
         version_fn: Callable[[], Any] = lambda: None,
     ) -> None:
-        """Never returns; cancel to stop. Bursts coalesce into one flush."""
+        """Never returns; cancel to stop. Bursts coalesce into one flush.
+
+        A render that raises is logged and the loop carries on. Letting it
+        end the task left the session looking connected with nothing ever
+        rendering again; this way the next invalidate() tries once more, and
+        the page recovers as soon as the state that broke it moves.
+        """
         self._loop = asyncio.get_running_loop()
         while True:
             await self._event.wait()
             self._event.clear()
-            env = self.flush(state_fn(), version_fn())
+            try:
+                env = self.flush(state_fn(), version_fn())
+            except Exception:
+                log.exception("render failed")
+                continue
             if env is not None:
                 await send(env)
