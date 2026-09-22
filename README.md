@@ -64,7 +64,7 @@ def on_ws(msg, state):
 
 ```tsx
 import * as MUI from '@mui/material';
-import { createRenderer } from 'flyrail-renderer';
+import { createRenderer } from 'flyrail-renderer/react';
 import { createStore } from 'flyrail-renderer/store';
 
 const { ServerNode } = createRenderer({ ...MUI });  // auto-registered, no switch

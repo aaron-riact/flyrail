@@ -67,5 +67,35 @@ class ReadmeQuickstartTest(unittest.TestCase):
         self.assertEqual(seqs, sorted(set(seqs)), f"seq not strictly rising: {seqs}")
 
 
+class JsImportTest(unittest.TestCase):
+    """Every documented flyrail-renderer import names something that entry
+    point exports, so a copied snippet does not fail on its first line."""
+
+    def test_documented_imports_resolve(self):
+        import json
+
+        pkg = ROOT / "js"
+        exports = json.loads((pkg / "package.json").read_text())["exports"]
+        sources = [README, pkg / "README.md", pkg / "ServerNode.tsx",
+                   *sorted((ROOT / "docs").glob("*.md"))]
+        pattern = re.compile(
+            r"import\s*\{([^}]*)\}\s*from\s*['\"]flyrail-renderer(/[\w-]+)?['\"]")
+        checked = 0
+        for source in sources:
+            for names, sub in pattern.findall(source.read_text()):
+                target = pkg / exports["." + (sub or "")]
+                code = target.read_text()
+                for name in (n.split(" as ")[0].strip() for n in names.split(",")):
+                    if not name:
+                        continue
+                    checked += 1
+                    exported = re.search(
+                        rf"export\s+(async\s+)?(function|const|let|class)\s+{name}\b", code)
+                    self.assertTrue(
+                        exported, f"{source.name}: {name!r} is not exported by "
+                                  f"flyrail-renderer{sub} ({target.name})")
+        self.assertGreater(checked, 0, "no documented imports found")
+
+
 if __name__ == "__main__":
     unittest.main()

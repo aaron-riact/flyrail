@@ -15,7 +15,7 @@ import {
  * BYOF renderer. Auto-registers MUI (or any lib) — no switch statement.
  *
  *   import * as MUI from '@mui/material';
- *   import { createRenderer } from 'flyrail-renderer';
+ *   import { createRenderer } from 'flyrail-renderer/react';
  *   const { ServerNode, setSlot } = createRenderer({ ...MUI });
  *
  * Wire logic (message shapes, key resolution, label folding) lives in
