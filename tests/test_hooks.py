@@ -401,5 +401,67 @@ class ComponentMemoTest(unittest.TestCase):
         assert runs == ['a']
 
 
+class MutableArgumentTest(unittest.TestCase):
+    """Equality says nothing when old and new are one object: an in-place
+    change moved both, so they compare equal whatever happened."""
+
+    def setUp(self):
+        from flyrail import pure
+        self.runs = []
+        runs = self.runs
+
+        @component
+        @pure
+        def Gauge(source):
+            runs.append(1)
+            return Text(repr(source))
+        self.Gauge = Gauge
+
+    def test_the_same_mutable_object_changed_in_place_re_runs(self):
+        class Sim:
+            speed = 1
+            def __repr__(self):
+                return f"speed {self.speed}"
+
+        sim = Sim()
+        layout = Layout(lambda s: Stack(self.Gauge(s)))
+        layout.tick(sim)
+        sim.speed = 2
+        ops = layout.tick(sim)
+
+        self.assertEqual(len(self.runs), 2)
+        self.assertIn("speed 2", repr(ops))
+
+    def test_a_list_mutated_in_place_re_runs(self):
+        items = [1]
+        layout = Layout(lambda s: Stack(self.Gauge(s)))
+        layout.tick(items)
+        items.append(2)
+        layout.tick(items)
+        self.assertEqual(len(self.runs), 2)
+
+    def test_a_fresh_container_holding_a_shared_mutable_re_runs(self):
+        shared = {"n": 1}
+        layout = Layout(lambda s: Stack(self.Gauge([s])))
+        layout.tick(shared)
+        shared["n"] = 2
+        layout.tick(shared)
+        self.assertEqual(len(self.runs), 2)
+
+    def test_immutable_values_are_still_memoised(self):
+        layout = Layout(lambda s: Stack(self.Gauge(s)))
+        value = ("a", 1, (2.0, None))
+        layout.tick(value)
+        layout.tick(value)
+        layout.tick(("a", 1, (2.0, None)))
+        self.assertEqual(len(self.runs), 1)
+
+    def test_fresh_equal_mutables_are_still_memoised(self):
+        layout = Layout(lambda s: Stack(self.Gauge(list(s))))
+        layout.tick([1, 2])
+        layout.tick([1, 2])
+        self.assertEqual(len(self.runs), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -123,6 +123,12 @@ arguments and only the one whose `selected` moved does any work.
 
 Unchanged render, twelve rows: **161.68 µs → 5.41 µs**.
 
+Pass values, not the host's state object. The memo never trusts an argument
+that is the same mutable object it saw last time — an in-place change moves
+both sides, so they would compare equal whatever happened — so
+`Gauge(state)` re-runs every render, while `Gauge(state.speed)` is skipped
+until the speed moves.
+
 `@pure` is a declaration, not a proof. A component that reads state it was not
 handed will go stale — that is the bug the decorator warns about, and
 `memo=False` or `reset()` is how you go looking for it.
@@ -428,4 +434,5 @@ happened.
 documents `invalidate()` per tick for tick hosts, so clearing there would mean
 the memo never survives a tick. Host state reaches a component through its
 arguments, which the memo compares, so anything the host actually changed
-re-renders on that basis. `reset()` is the one that forgets everything.
+re-renders on that basis — a mutable object passed as-is included, since the
+memo never trusts one to be unchanged. `reset()` is the one that forgets everything.

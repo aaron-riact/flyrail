@@ -21,6 +21,40 @@ def _unchanged(old: Any, new: Any) -> bool:
         return False
 
 
+_IMMUTABLE = (type(None), bool, int, float, complex, str, bytes, range)
+
+
+def _immutable(value: Any) -> bool:
+    """Whether value is known never to change in place."""
+    if isinstance(value, _IMMUTABLE):
+        return True
+    if isinstance(value, (tuple, frozenset)):
+        return all(_immutable(item) for item in value)
+    return False
+
+
+def _args_unchanged(old: Any, new: Any) -> bool:
+    """Whether a memoised component's arguments still say the same thing.
+
+    Plain equality is not enough here. A host that passes its own mutable
+    state hands the component the very object it cached, and an in-place
+    change moved both sides, so they compare equal whatever happened. The
+    same object is only trusted when it cannot change; containers are walked
+    so a fresh list holding that object is caught as well.
+    """
+    if old is new:
+        return _immutable(old)
+    if type(old) is not type(new):
+        return _unchanged(old, new)
+    if isinstance(old, (list, tuple)):
+        return (len(old) == len(new)
+                and all(_args_unchanged(a, b) for a, b in zip(old, new)))
+    if isinstance(old, dict):
+        return (old.keys() == new.keys()
+                and all(_args_unchanged(old[k], new[k]) for k in old))
+    return _unchanged(old, new)
+
+
 def _is_async(fn: Any) -> bool:
     """Whether calling fn starts a coroutine, without calling it.
 
@@ -227,8 +261,9 @@ class Layout:
         memo never survives a tick and buys nothing for the main use case.
         Host state reaches a component through its arguments, which the memo
         compares, so anything the host actually changed re-renders on that
-        basis. A @pure component that reads host state it was not passed is
-        lying, and this is the stale UI the decorator warns about; reach for
+        basis -- including a mutable object changed in place, which the memo
+        never trusts to be unchanged. A @pure component that reads host state
+        it was not passed is lying, and this is the stale UI the decorator warns about; reach for
         reset() or memo=False when chasing one.
         """
         self._dirty = True
@@ -305,9 +340,9 @@ class Layout:
     def _reusable(self, slot_id: Any, fn: Any, node: dict) -> Any:
         """The cached subtree for this component, if reusing it is safe.
 
-        Safe means: it was marked @pure, its arguments still compare equal, its
-        own hooks have not been written to, and nothing expanded beneath it has
-        either. Strict mode never reuses -- its whole job is to render twice and
+        Safe means: it was marked @pure, its arguments still say the same
+        thing (see _args_unchanged), its own hooks have not been written to,
+        and nothing expanded beneath it has either. Strict mode never reuses -- its whole job is to render twice and
         compare, which a cache would quietly turn into one render.
         """
         if not self.memo or self.strict or not getattr(fn, "_flyrail_pure", False):
@@ -320,9 +355,9 @@ class Layout:
         if self._dirty_slots & self._subtree.get(slot_id, frozenset()):
             return None
         args, kwargs, result = remembered
-        if not _unchanged(args, node.get("args", ())):
+        if not _args_unchanged(args, node.get("args", ())):
             return None
-        if not _unchanged(kwargs, node.get("kwargs", {})):
+        if not _args_unchanged(kwargs, node.get("kwargs", {})):
             return None
         return result
 
