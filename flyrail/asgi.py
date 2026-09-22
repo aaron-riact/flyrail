@@ -8,10 +8,13 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import logging
 from typing import Any, Callable
 
 from .driver import Driver
 from .layout import Layout
+
+log = logging.getLogger("flyrail")
 
 
 def create_ws_app(
@@ -60,8 +63,13 @@ def create_ws_app(
                     continue
                 kind = data.get("type")
                 if kind == "action":
-                    await layout.adispatch(
-                        data["handlerId"], state, data.get("event"))
+                    hid = data.get("handlerId")
+                    if not isinstance(hid, str) or hid not in layout.registry:
+                        # Ids are rebuilt every render, so a click on something
+                        # the last patch removed is ordinary, not an error.
+                        log.info("ignoring action for stale handler %r", hid)
+                        continue
+                    await layout.adispatch(hid, state, data.get("event"))
                     driver.invalidate()
                 elif kind == "resync-request":
                     driver.seq += 1

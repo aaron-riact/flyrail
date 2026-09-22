@@ -99,6 +99,26 @@ class AdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(ch.ui()), 1)  # no ui response
         await self.stop(task, ch)
 
+    async def test_a_stale_handler_id_does_not_end_the_session(self):
+        """Handler ids are rebuilt every render, so a click on a button the
+        last patch removed is ordinary traffic. It raised KeyError out of the
+        receive loop and closed the connection."""
+        ch = Channel()
+        task = await self.run_app(ch, state_factory=lambda: {"v": 1})
+        hid = ch.ui()[0]["tree"]["children"][1]["on_click"]["handlerId"]
+
+        with self.assertLogs("flyrail", "INFO"):
+            await ch.incoming.put({"type": "websocket.receive", "text": json.dumps(
+                {"chan": "ui", "type": "action", "handlerId": "gone"})})
+            await asyncio.sleep(0.05)
+        self.assertFalse(task.done(), "session ended on a stale click")
+
+        await ch.incoming.put({"type": "websocket.receive", "text": json.dumps(
+            {"chan": "ui", "type": "action", "handlerId": hid})})
+        await ch.wait_ui(2)
+        self.assertEqual(ch.ui()[1]["type"], "patch")
+        await self.stop(task, ch)
+
     async def test_rejects_non_websocket_scope(self):
         ch = Channel()
         app = create_ws_app(panel)
