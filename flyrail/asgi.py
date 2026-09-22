@@ -95,10 +95,10 @@ def create_ws_app(
                     except Exception:
                         # One bad handler must not close the page: a closed
                         # socket is a reload, and a reload loses the session.
-                        # It may have changed state before raising, so still
-                        # render.
+                        # adispatch marks the layout dirty and wakes the
+                        # driver either way: the handler may have changed
+                        # state before raising.
                         log.exception("handler %r raised", hid)
-                    driver.invalidate()
                 elif kind == "resync-request":
                     try:
                         snap = layout.snapshot(state, driver.seq + 1)

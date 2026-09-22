@@ -198,20 +198,23 @@ collect its hooks and the component would silently restart.
 ```mermaid
 flowchart TD
     subgraph K["tick host"]
-        K1["invalidate per tick"]
-        K2["flush state version"]
+        K1["handlers and hooks<br/>mark dirty"]
+        K2["flush state version<br/>every tick"]
     end
     subgraph Y["async host"]
-        Y1["invalidate on event"]
+        Y1["handlers and hooks<br/>wake the loop"]
         Y2["await Driver run"]
     end
     subgraph N["naive host"]
-        N1["invalidate + flush<br/>per message"]
+        N1["flush per message"]
     end
     K1 --> K2
     Y1 --> Y2
 ```
 
 One `Driver` primitive serves all three: dirty flag + seq counter shared by
-`flush()` (sync) and `run()` (async, bursts coalesce). The raw-ASGI adapter
+`flush()` (sync) and `run()` (async, bursts coalesce). The version gate skips
+a tick's render while the host's token holds; a dispatched handler or a hook
+setter marks the layout dirty, and `invalidate()` covers any other change the
+token misses. The raw-ASGI adapter
 (`create_ws_app`) is the async recipe with one session per connection.

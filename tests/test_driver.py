@@ -3,7 +3,7 @@ import asyncio
 import concurrent.futures
 import unittest
 
-from flyrail import Layout, Stack, Text
+from flyrail import Button, Layout, Stack, Text
 from flyrail.core import pure
 from flyrail.driver import Driver
 
@@ -40,6 +40,26 @@ class FlushTest(unittest.TestCase):
         d = Driver(Layout(lambda s: Stack(Text(f"v={s['v']}"))))
         self.assertIsNotNone(d.flush({"v": 1}, version=1))
         self.assertIsNone(d.flush({"v": 1}, version=1))
+
+    def test_a_dispatched_handler_renders_without_a_version_bump(self):
+        """The version gate trusts the host's token, so a handler that
+        changed host state without moving it was skipped -- which is why the
+        docs had tick hosts invalidate() on every tick, and that in turn
+        meant the gate never skipped anything. A handler that ran now marks
+        the layout dirty itself."""
+        state = {"v": 1}
+        layout = Layout(lambda s: Stack(Text(f"v={s['v']}"), Button(
+            "+", on_click=lambda st, e: st.update(v=st["v"] + 1), key="inc")))
+        layout.render_fn._flyrail_pure = True
+        d = Driver(layout)
+        d.flush(state, version=1)
+        self.assertIsNone(d.flush(state, version=1))  # gate: skipped
+
+        layout.dispatch(next(iter(layout.registry)), state)
+        env = d.flush(state, version=1)
+
+        self.assertIsNotNone(env, "handler's change was skipped by the gate")
+        self.assertIn("v=2", repr(env["ops"]))
 
     def test_invalidate_without_loop_does_not_raise(self):
         d = Driver(Layout(PurePanel().render))

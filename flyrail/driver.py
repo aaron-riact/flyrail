@@ -12,9 +12,13 @@ log = logging.getLogger("flyrail")
 class Driver:
     """Wraps Layout with dirty-flag scheduling and caller-owned seq.
 
-    Tick hosts:   invalidate() per tick (or on sim change); flush(state, version).
-    Async hosts:  invalidate() from event handlers; await run(state_fn, send).
-    Naive hosts:  invalidate() + flush() around every message.
+    Tick hosts:   flush(state, version) every tick. The version gate skips
+                  the render while the token holds; invalidate() only for a
+                  change the token does not cover.
+    Async hosts:  await run(state_fn, send). Dispatched handlers and hook
+                  setters wake it; invalidate() for anything else.
+    Naive hosts:  flush(state) after every message. With no version it always
+                  renders, and sends only what changed.
     Thread-safe invalidate: safe to call from any thread; the run loop
     (single asyncio loop assumption) wakes via call_soon_threadsafe.
     """

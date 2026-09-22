@@ -265,17 +265,19 @@ class Layout:
 
     def invalidate(self) -> None:
         """Mark dirty: the next tick() re-renders regardless of version.
-        Scheduling seam for hook dispatch and the Driver.
 
-        Deliberately does not drop memoised subtrees. Driver documents
-        invalidate() per tick for tick hosts, so clearing here would mean the
-        memo never survives a tick and buys nothing for the main use case.
-        Host state reaches a component through its arguments, which the memo
-        compares, so anything the host actually changed re-renders on that
-        basis -- including a mutable object changed in place, which the memo
-        never trusts to be unchanged. A @pure component that reads host state
-        it was not passed is lying, and this is the stale UI the decorator warns about; reach for
-        reset() or memo=False when chasing one.
+        For a host change the version token does not cover. Dispatched
+        handlers and hook setters mark the layout dirty themselves, so a tick
+        host that versions its state need not call this at all.
+
+        Deliberately does not drop memoised subtrees: a host that does call
+        it every tick would otherwise lose the memo every tick. Host state
+        reaches a component through its arguments, which the memo compares,
+        so anything the host actually changed re-renders on that basis --
+        including a mutable object changed in place, which the memo never
+        trusts to be unchanged. A @pure component that reads host state it
+        was not passed is lying, and this is the stale UI the decorator warns
+        about; reach for reset() or memo=False when chasing one.
         """
         self._dirty = True
 
@@ -601,7 +603,10 @@ class Layout:
             raise RuntimeError(
                 f"handler {handler_id!r} is async; use await adispatch() "
                 "instead of dispatch()")
-        res = fn(state, event)
+        try:
+            res = fn(state, event)
+        finally:
+            self._handled()
         if inspect.isawaitable(res):
             # A sync function that returns an awaitable: nothing of the
             # awaitable has run, so closing it really does cancel it.
@@ -613,14 +618,30 @@ class Layout:
 
     async def adispatch(self, handler_id: str, state: Any, event: Any = None) -> Any:
         """Dispatch both sync and async handlers; awaits awaitables.
-        Async-host pattern: await layout.adispatch(...) then invalidate()."""
+        Like dispatch(), marks the layout dirty, so the next flush renders."""
         fn = self.registry.get(handler_id)
         if fn is None:
             raise KeyError(f"unknown handler {handler_id!r}")
-        res = fn(state, event)
-        if inspect.isawaitable(res):
-            res = await res
+        try:
+            res = fn(state, event)
+            if inspect.isawaitable(res):
+                res = await res
+        finally:
+            self._handled()
         return res
+
+    def _handled(self) -> None:
+        """A handler ran, so host state has probably moved.
+
+        The version gate trusts the host's token, and a handler that changed
+        state without moving it was skipped. Marking dirty here -- even when
+        the handler raised part way -- is what lets a tick host pass its
+        token every tick instead of invalidating every tick, which is what
+        stopped the gate from ever skipping.
+        """
+        self._dirty = True
+        if self.on_schedule is not None:
+            self.on_schedule()
 
     def set_slot(self, name: str, value: Any) -> dict | None:
         """Hot path bypassing the diff: unchanged values return None.

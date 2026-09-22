@@ -430,9 +430,10 @@ happened.
 | `Layout(keyed_lists=False)` | your client only understands object pointers, not array indices |
 | `Layout(strict=True)` | double-render a `@pure` root and compare, to catch nondeterminism |
 
-`invalidate()` deliberately does **not** drop memoised subtrees. `Driver`
-documents `invalidate()` per tick for tick hosts, so clearing there would mean
-the memo never survives a tick. Host state reaches a component through its
+`invalidate()` deliberately does **not** drop memoised subtrees: a host that
+calls it every tick would otherwise lose the memo every tick. A tick host that
+versions its state need not call it at all — dispatched handlers and hook
+setters mark the layout dirty themselves. Host state reaches a component through its
 arguments, which the memo compares, so anything the host actually changed
 re-renders on that basis — a mutable object passed as-is included, since the
 memo never trusts one to be unchanged. `reset()` is the one that forgets everything.

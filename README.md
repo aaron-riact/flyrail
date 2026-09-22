@@ -96,8 +96,8 @@ app = create_ws_app(Panel().render, state_factory=Sim,
                     allowed_origins={"https://hmi.example"},  # set in production
                     on_message=lambda data, state: handle_telemetry(data))
 
-# 3. Naive host (no loop at all): invalidate + flush around every message.
-driver.invalidate()
+# 3. Naive host (no loop at all): flush after every message. With no version
+#    it always renders, and sends only what changed.
 if env := driver.flush(state):
     send(env)
 ```
@@ -143,8 +143,9 @@ if env := driver.flush(state):
     order-stable, or it raises loudly.
 11. **Async handlers via `adispatch`.** Handlers may be `async def` (e.g.
     `await db.save()` on click); sync `dispatch` refuses them loudly instead
-    of silently dropping the coroutine. Pattern: `await adispatch(...)`,
-    then `invalidate()`.
+    of silently dropping the coroutine. Like `dispatch`, `adispatch` marks
+    the layout dirty, so the next flush renders the handler's change even
+    when the version token has not moved.
 
 ## Docs
 
