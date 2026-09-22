@@ -47,7 +47,18 @@ export function createRenderer(
     return <>{v ?? fallback}</>;
   }
 
-  function ServerNode({ node, send }: { node: any; send: (msg: any) => void }) {
+  // Memoised: applyOps shares every subtree a patch did not touch, so a node
+  // that is the same object as last render has nothing new to show. Keep
+  // `send` stable (useCallback, or a module-level function), or every node
+  // renders anyway. The inner function has its own name on purpose: named
+  // ServerNode, children would recurse into it and skip the memo.
+  const ServerNode = React.memo(function ServerNodeBody({
+    node,
+    send,
+  }: {
+    node: any;
+    send: (msg: any) => void;
+  }) {
     // First line, before any early return: hooks must run unconditionally.
     const senderRef = React.useRef<{
       key: string;
@@ -147,7 +158,7 @@ export function createRenderer(
       return <ServerNode key={childKey(c, i)} node={c} send={send} />;
     });
     return <Comp {...props}>{children}</Comp>;
-  }
+  });
 
   return { ServerNode, setSlot, slots };
 }

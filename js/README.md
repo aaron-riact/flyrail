@@ -21,6 +21,10 @@ descriptors to real components. No switch statement: with
   `createRenderer(registry, { slots: store.slots })` so slot messages and
   snapshot slots reach them; the hub remembers values, so a Slot that mounts
   late still shows the latest one.
+- Patches share every subtree they do not touch, and `ServerNode` is
+  memoised, so a patch re-renders only the nodes it changed. Pass a stable
+  `send` (`useCallback` or a module-level function); a new one each render
+  re-renders every node.
 - For prod bundles prefer an explicit allowlist
   (`createRenderer({Button, TextField})`) over the full namespace import
   to keep tree-shaking.

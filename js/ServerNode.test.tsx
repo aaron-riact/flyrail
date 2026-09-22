@@ -3,6 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createRenderer } from "./ServerNode.tsx";
 import { createStore } from "./store.mjs";
+import { applyOps } from "./protocol.mjs";
 
 afterEach(cleanup);
 
@@ -157,4 +158,29 @@ test("a change still pending when the input unmounts is sent at once", () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("a patch re-renders only the nodes it changed", () => {
+  // applyOps shares untouched subtrees, so a node whose object is the same
+  // as last time has nothing new to show and should not render again.
+  const renders: Record<string, number> = {};
+  function Counted({ value }: any) {
+    renders[value] = (renders[value] ?? 0) + 1;
+    return <span>{value}</span>;
+  }
+  const { ServerNode } = createRenderer({ ...registry, Counted });
+  const send = () => {};
+  const before = {
+    type: "Stack",
+    props: {},
+    children: [
+      { type: "Counted", key: "a", props: { value: "a" } },
+      { type: "Counted", key: "b", props: { value: "b" } },
+    ],
+  };
+  const { rerender } = render(<ServerNode node={before} send={send} />);
+  const after = applyOps(before, [{ op: "replace", path: "/children/1/props/value", value: "B" }]);
+  rerender(<ServerNode node={after} send={send} />);
+
+  expect(renders).toEqual({ a: 1, b: 1, B: 1 });
 });
