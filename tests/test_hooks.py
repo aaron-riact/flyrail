@@ -77,6 +77,28 @@ class StateTest(unittest.TestCase):
             layout.tick({"extra": True})
 
 
+    def test_unkeyed_state_moves_with_its_keyed_parent(self):
+        """An unkeyed component is placed by its path, and the path has to be
+        built from ancestor keys the way handler ids are; built from indices,
+        reversing the rows left each count where its row used to be."""
+        @component
+        def Count():
+            n, set_n = use_state(0)
+            return Button(str(n), on_click=lambda st, ev: set_n(n + 1), key="inc")
+
+        rows = ["a", "b"]
+        layout = Layout(lambda s: Stack(
+            *[Stack(Text(r, key="t"), Count(), key=r) for r in rows]))
+        tree = layout.render({})
+        layout.dispatch(tree["children"][0]["children"][1]["on_click"]["handlerId"], {})
+
+        rows.reverse()
+        tree = layout.render({})
+        counts = {row["key"]: row["children"][1]["props"]["label"]
+                  for row in tree["children"]}
+        self.assertEqual(counts, {"a": "1", "b": "0"})
+
+
 class MemoTest(unittest.TestCase):
     def test_recomputes_only_on_dep_change(self):
         recomputes = []

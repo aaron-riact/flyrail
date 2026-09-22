@@ -394,11 +394,15 @@ class Layout:
             out = dict(node)
             children = out.get("children")
             if isinstance(children, list):
-                out["children"] = [self._expand(c, f"{path}.{i}")
+                # Keyed segments, as for handler ids: an unkeyed component
+                # is placed by this path, so its state has to follow a keyed
+                # ancestor that moves rather than stay at the old index.
+                out["children"] = [self._expand(c, f"{path}.{_segment(c, i)}")
                                    for i, c in enumerate(children)]
             return out
         if isinstance(node, list):
-            return [self._expand(c, f"{path}.{i}") for i, c in enumerate(node)]
+            return [self._expand(c, f"{path}.{_segment(c, i)}")
+                    for i, c in enumerate(node)]
         return node
 
     def _serialize(self, node: Any, path: str, collected: dict) -> Any:
