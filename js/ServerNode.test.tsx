@@ -137,3 +137,24 @@ test("once the server has caught up, its later changes show", () => {
   rerender(<ServerNode node={field("")} send={() => {}} />); // server clears it
   expect(input.value).toBe("");
 });
+
+test("a change still pending when the input unmounts is sent at once", () => {
+  // The debounce timer outlived the component: the edit went out whenever it
+  // fired, after the field was gone, or was lost if the page moved on.
+  vi.useFakeTimers();
+  try {
+    const { ServerNode } = createRenderer(registry);
+    const sent: any[] = [];
+    const { unmount } = render(<ServerNode node={field("")} send={(m) => sent.push(m)} />);
+    fireEvent.change(screen.getByLabelText("field"), { target: { value: "last words" } });
+
+    unmount();
+    expect(sent).toEqual([
+      { chan: "ui", type: "action", handlerId: "f1", event: { value: "last words" } },
+    ]);
+    act(() => vi.advanceTimersByTime(200));
+    expect(sent.length).toBe(1); // flushed once, not again by the old timer
+  } finally {
+    vi.useRealTimers();
+  }
+});

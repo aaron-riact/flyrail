@@ -63,6 +63,16 @@ export function createRenderer(
     // debounce, so without this every keystroke was put back.
     const [draft, setDraft] = React.useState<{ hid: string; value: any } | null>(null);
     const serverValue = node?.props?.value;
+    React.useEffect(
+      () => () => {
+        // Leaving the tree: send the edit the debounce is still holding now,
+        // rather than from a timer that outlives the field, and drop any
+        // trailing click throttle with it.
+        senderRef.current?.api.flush();
+        clickRef.current?.cancel();
+      },
+      [],
+    );
     React.useEffect(() => {
       // Caught up: hand control back, so a later server change shows.
       if (draft && Object.is(draft.value, serverValue)) setDraft(null);
