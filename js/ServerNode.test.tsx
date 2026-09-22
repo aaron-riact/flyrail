@@ -1,5 +1,5 @@
 import * as React from "react";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createRenderer } from "./ServerNode.tsx";
 import { createStore } from "./store.mjs";
@@ -86,4 +86,54 @@ test("slots reach SlotView through a shared store, snapshots included", () => {
 
   act(() => store.ingest({ chan: "ui", type: "snapshot", seq: 1, tree: {}, slots: { rpm: 900 } }));
   expect(document.body.textContent).toBe("900");
+});
+
+function field(value: string, handlerId = "f1") {
+  return { type: "TextField", props: { value }, on_change: { handlerId } };
+}
+
+test("typing into a server-valued field shows what was typed", () => {
+  // The input is controlled by the server's value, and the change only goes
+  // out after a 150ms debounce. Until the echo came back, React put the
+  // server's old value back after every keystroke.
+  vi.useFakeTimers();
+  try {
+    const { ServerNode } = createRenderer(registry);
+    const sent: any[] = [];
+    render(<ServerNode node={field("rig-1")} send={(m) => sent.push(m)} />);
+    const input = screen.getByLabelText("field") as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: "rig-12" } });
+    expect(input.value).toBe("rig-12");
+    fireEvent.change(input, { target: { value: "rig-123" } });
+    expect(input.value).toBe("rig-123");
+
+    act(() => vi.advanceTimersByTime(200));
+    expect(sent).toEqual([
+      { chan: "ui", type: "action", handlerId: "f1", event: { value: "rig-123" } },
+    ]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a stale echo does not overwrite newer typing", () => {
+  const { ServerNode } = createRenderer(registry);
+  const { rerender } = render(<ServerNode node={field("")} send={() => {}} />);
+  const input = screen.getByLabelText("field") as HTMLInputElement;
+
+  fireEvent.change(input, { target: { value: "abc" } });
+  rerender(<ServerNode node={field("ab")} send={() => {}} />); // echo of an older value
+  expect(input.value).toBe("abc");
+});
+
+test("once the server has caught up, its later changes show", () => {
+  const { ServerNode } = createRenderer(registry);
+  const { rerender } = render(<ServerNode node={field("")} send={() => {}} />);
+  const input = screen.getByLabelText("field") as HTMLInputElement;
+
+  fireEvent.change(input, { target: { value: "abc" } });
+  rerender(<ServerNode node={field("abc")} send={() => {}} />); // echo caught up
+  rerender(<ServerNode node={field("")} send={() => {}} />); // server clears it
+  expect(input.value).toBe("");
 });

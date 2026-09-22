@@ -58,6 +58,15 @@ export function createRenderer(
       send: () => void;
       cancel: () => void;
     } | null>(null);
+    // What the user typed and the server has not echoed yet. The server's
+    // value controls the input, and a change goes out only after the
+    // debounce, so without this every keystroke was put back.
+    const [draft, setDraft] = React.useState<{ hid: string; value: any } | null>(null);
+    const serverValue = node?.props?.value;
+    React.useEffect(() => {
+      // Caught up: hand control back, so a later server change shows.
+      if (draft && Object.is(draft.value, serverValue)) setDraft(null);
+    }, [draft, serverValue]);
     if (!node) return null;
     if (node.type === '__Slot__') {
       return <SlotView name={node.props.name} fallback={node.props.default} />;
@@ -107,10 +116,16 @@ export function createRenderer(
         senderRef.current = { key, api };
       }
       const api = senderRef.current.api;
+      const controlled = 'value' in (node.props || {});
+      if (controlled && draft && draft.hid === hid && !Object.is(draft.value, serverValue)) {
+        props.value = draft.value;
+      }
       props.onChange = (e: any) => {
         if (shouldPreventDefault(entry)) e.preventDefault();
         if (shouldStopPropagation(entry)) e.stopPropagation();
-        api.send(hid, e?.target?.value);
+        const value = e?.target?.value;
+        if (controlled) setDraft({ hid, value });
+        api.send(hid, value);
       };
     }
     // No server children: leave props.children alone. Passing an empty list
