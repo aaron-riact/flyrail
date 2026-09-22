@@ -1,5 +1,6 @@
 """Focused tests for Driver scheduling across host models."""
 import asyncio
+import concurrent.futures
 import unittest
 
 from flyrail import Layout, Stack, Text
@@ -156,7 +157,7 @@ class ThreadWakeTest(unittest.TestCase):
 
             try:
                 asyncio.run_coroutine_threadsafe(shutdown(), loop).result(1.0)
-            except TimeoutError:
+            except concurrent.futures.TimeoutError:  # not TimeoutError until 3.11
                 pass  # the stuck task of a regression; the thread is a daemon
             loop.call_soon_threadsafe(loop.stop)
             runner.join(1.0)
