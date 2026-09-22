@@ -59,6 +59,13 @@ class SerializeTest(unittest.TestCase):
         self.assertIn(hid, layout.registry)
         self.assertEqual(len(layout.registry), 1)
 
+    def test_an_empty_allowlist_allows_nothing(self):
+        """`if self.allowed_types:` read an empty set as "no allowlist", so
+        the strictest setting silently turned the check off."""
+        layout = Layout(lambda s: Stack(Text("a")), allowed_types=set())
+        with self.assertRaises(ValueError):
+            layout.render({})
+
     def test_allowlist_rejects_unknown_type(self):
         layout = Layout(
             lambda s: Stack(Button("A", on_click=lambda s, e: None)),

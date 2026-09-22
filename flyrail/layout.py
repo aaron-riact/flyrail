@@ -328,7 +328,7 @@ class Layout:
                 self._dirty_slots.discard(k)
         collected: dict[str, Callable] = {}
         tree = self._serialize(expanded, path="0", collected=collected)
-        if self.allowed_types:
+        if self.allowed_types is not None:
             self._check_allowlist(tree)
         # Swapped in only once the render has succeeded: the client still
         # shows the last tree that did, and its handlers have to stay live.
@@ -524,7 +524,7 @@ class Layout:
     def _check_allowlist(self, node: Any) -> None:
         if isinstance(node, dict):
             t = node.get("type")
-            if t not in ("__Slot__",) and t not in (self.allowed_types or set()):
+            if t not in ("__Slot__",) and t not in self.allowed_types:
                 raise ValueError(f"node type {t!r} not in allowlist")
             for c in node.get("children", []) or []:
                 self._check_allowlist(c)
