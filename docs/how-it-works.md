@@ -32,7 +32,7 @@ actions flow up as handler ids. Nothing else crosses the wire.
 |---|---|---|---|
 | `patch` | server to client | `{chan, type, seq, ops}` | Tree diff since last send |
 | `slot` | server to client | `{chan, type, name, value}` | Hot value bypassing the diff |
-| `snapshot` | server to client | `{chan, type, seq, tree}` | Full tree (first paint, gap recovery) |
+| `snapshot` | server to client | `{chan, type, seq, tree, slots}` | Full tree and last slot values (first paint, gap recovery) |
 | `action` | client to server | `{chan, type, handlerId, event?}` | Click / change with optional value |
 | `resync-request` | client to server | `{chan, type}` | "I skipped a seq, send snapshot" |
 

@@ -2,7 +2,7 @@
 import json
 import unittest
 
-from flyrail import Layout, Stack, Text, Button
+from flyrail import Layout, Slot, Stack, Text, Button
 
 
 class SnapshotTest(unittest.TestCase):
@@ -34,6 +34,24 @@ class SnapshotTest(unittest.TestCase):
         hid = msg["tree"]["children"][0]["on_click"]["handlerId"]
         layout.dispatch(hid, {})
         self.assertEqual(seen, [True])
+
+    def test_snapshot_carries_the_last_slot_values(self):
+        """The store clears its slots on a snapshot, and set_slot stays quiet
+        about a value it has already sent, so a slot missing from the
+        snapshot stays blank on the client until its value next changes."""
+        layout = Layout(lambda s: Stack(Slot("rpm")))
+        layout.set_slot("rpm", 1200)
+
+        msg = layout.snapshot({}, seq=1)
+
+        self.assertEqual(msg["slots"], {"rpm": 1200})
+        self.assertIsNone(layout.set_slot("rpm", 1200))
+
+    def test_snapshot_slots_are_a_copy(self):
+        layout = Layout(lambda s: Stack(Slot("rpm")))
+        msg = layout.snapshot({}, seq=1)
+        layout.set_slot("rpm", 1)
+        self.assertEqual(msg["slots"], {})
 
 
 if __name__ == "__main__":
