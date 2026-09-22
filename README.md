@@ -151,6 +151,7 @@ if env := driver.flush(state):
 
 - [How it works](docs/how-it-works.md) — architecture, tick/action/resync
   sequences, render pipeline, hook slots, scheduling, message catalog.
+- [Changelog](CHANGELOG.md) — what changed, breaking changes first.
 
 ## Layout
 
