@@ -214,6 +214,34 @@ class AdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ch.ui()[1]["seq"], 2, "the failed resync used up a seq")
         await self.stop(task, ch)
 
+    async def test_an_origin_outside_the_allowlist_is_refused(self):
+        """Browsers send cookies on a cross-site websocket, so without an
+        origin check any page a user visits can open a session as them."""
+        app = create_ws_app(panel, state_factory=lambda: {"v": 1},
+                            allowed_origins={"https://hmi.example"})
+        ch = Channel()
+        scope = {**SCOPE, "headers": [(b"origin", b"https://evil.example")]}
+
+        await asyncio.wait_for(app(scope, ch.receive, ch.send), 1.0)
+
+        self.assertEqual(ch.sent, [{"type": "websocket.close", "code": 1008}])
+
+    async def test_an_allowed_origin_connects(self):
+        app = create_ws_app(panel, state_factory=lambda: {"v": 1},
+                            allowed_origins={"https://hmi.example"})
+        ch = Channel()
+        scope = {**SCOPE, "headers": [(b"origin", b"https://hmi.example")]}
+        task = asyncio.create_task(app(scope, ch.receive, ch.send))
+        await ch.wait_ui(1)
+        self.assertEqual(ch.sent[0], {"type": "websocket.accept"})
+        await self.stop(task, ch)
+
+    async def test_a_missing_origin_is_refused_when_an_allowlist_is_set(self):
+        app = create_ws_app(panel, allowed_origins={"https://hmi.example"})
+        ch = Channel()
+        await asyncio.wait_for(app(SCOPE, ch.receive, ch.send), 1.0)
+        self.assertEqual(ch.sent, [{"type": "websocket.close", "code": 1008}])
+
     async def test_rejects_non_websocket_scope(self):
         ch = Channel()
         app = create_ws_app(panel)

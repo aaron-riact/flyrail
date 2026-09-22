@@ -25,13 +25,27 @@ def create_ws_app(
     allowed_types: set[str] | None = None,
     strict: bool = False,
     on_message: Callable[[dict, Any], Any] | None = None,
+    allowed_origins: set[str] | None = None,
 ):
-    """Return an ASGI websocket app serving one flyrail session per connection."""
+    """Return an ASGI websocket app serving one flyrail session per connection.
+
+    Set allowed_origins in production. Browsers send cookies with a
+    cross-site websocket, so without it any page a user visits can open a
+    session as them. With it, a connection whose Origin header is missing or
+    not listed is closed before it is accepted (code 1008, policy
+    violation). None, the default, accepts every origin.
+    """
     _version_of = version_fn or (lambda: None)
 
     async def app(scope, receive, send):
         if scope["type"] != "websocket":
             raise RuntimeError("flyrail ASGI app handles websocket scope only")
+        if allowed_origins is not None:
+            origin = dict(scope.get("headers") or []).get(b"origin", b"")
+            if origin.decode("latin-1") not in allowed_origins:
+                log.warning("refusing websocket from origin %r", origin)
+                await send({"type": "websocket.close", "code": 1008})
+                return
         layout = Layout(render_fn, allowed_types=allowed_types, strict=strict)
         driver = Driver(layout)
         state = state_factory()

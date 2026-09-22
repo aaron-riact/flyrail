@@ -89,8 +89,11 @@ def on_tick(state, version):
 #    (or mount in any ASGI framework; no fastapi dependency in this package)
 #    A click on a handler the last patch removed is ignored, and a handler
 #    that raises is logged on the "flyrail" logger: neither closes the session.
+#    allowed_origins refuses other sites' pages: browsers send cookies with a
+#    cross-site websocket. Authentication is still the host's job.
 from flyrail import create_ws_app
 app = create_ws_app(Panel().render, state_factory=Sim,
+                    allowed_origins={"https://hmi.example"},  # set in production
                     on_message=lambda data, state: handle_telemetry(data))
 
 # 3. Naive host (no loop at all): invalidate + flush around every message.
