@@ -24,5 +24,8 @@ descriptors to real components. No switch statement: with
 
 ## Tests
 
-`node --test js/protocol.test.mjs` covers the wire logic in
-`protocol.mjs`, which `ServerNode.tsx` imports (tested code = shipped code).
+`npm test` runs both halves. `node --test` covers the wire logic in
+`protocol.mjs` and `store.mjs`, which `ServerNode.tsx` imports (tested code =
+shipped code); vitest with React Testing Library renders `ServerNode.tsx`
+itself in jsdom, against plain stand-ins for the MUI components. The test
+tooling is dev-only: the published package still has no dependencies.

@@ -9,9 +9,16 @@
     "./react": "./ServerNode.tsx"
   },
   "scripts": {
-    "test": "node --test protocol.test.mjs store.test.mjs"
+    "test": "node --test protocol.test.mjs store.test.mjs && vitest run"
   },
   "peerDependencies": {
     "react": ">=18"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "jsdom": "^30.1.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "vitest": "^5.0.1"
   }
 }

@@ -179,6 +179,5 @@ PYTHONPATH=. python3 example/hmi_demo.py                 # narrated wire demo
   JSON-Schema renderer (see rjsf), not a full reactpy replacement (sync
   core with no async effects; bring your own frontend instead of an
   owned tree).
-- Roadmap: vitest + React Testing Library for `ServerNode`, `byId/order`
-  maps for huge reorderable lists, keystroke `ackSeq` if loss-less input sync
+- Roadmap: `byId/order` maps for huge reorderable lists, keystroke `ackSeq` if loss-less input sync
   is ever needed, registry packaging.
