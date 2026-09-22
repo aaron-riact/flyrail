@@ -2,8 +2,6 @@
 import asyncio
 import unittest
 
-import pytest
-
 from flyrail import Layout, Stack, Button
 
 
@@ -84,7 +82,7 @@ class RefusalTest(unittest.TestCase):
         layout.render(None)
         handler_id = next(iter(layout.registry))
 
-        with pytest.raises(RuntimeError, match='is async'):
+        with self.assertRaisesRegex(RuntimeError, 'is async'):
             layout.dispatch(handler_id, None, None)
 
         assert ran == [], 'nothing of the handler should have run'
@@ -105,7 +103,7 @@ class RefusalTest(unittest.TestCase):
         layout.render(None)
         handler_id = next(iter(layout.registry))
 
-        with pytest.raises(RuntimeError, match='is async'):
+        with self.assertRaisesRegex(RuntimeError, 'is async'):
             layout.dispatch(handler_id, None, None)
         assert ran == []
 
@@ -126,7 +124,7 @@ class RefusalTest(unittest.TestCase):
         layout.render(None)
         handler_id = next(iter(layout.registry))
 
-        with pytest.raises(RuntimeError, match='returned an awaitable'):
+        with self.assertRaisesRegex(RuntimeError, 'returned an awaitable'):
             layout.dispatch(handler_id, None, None)
 
         # Unavoidable: you cannot know a sync function returns an awaitable without
