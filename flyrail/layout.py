@@ -290,8 +290,10 @@ class Layout:
                     "render_fn marked @pure produced different trees across "
                     "two immediate renders; remove @pure or eliminate the "
                     "nondeterminism (time, random, counters, unversioned reads)")
-        self._run_effects()
+        # Clean before the effects, not after: an effect that sets state has
+        # just scheduled the next render, and clearing afterwards erased that.
         self._dirty = False
+        self._run_effects()
         return tree
 
     def _render_once(self, state: Any) -> dict:

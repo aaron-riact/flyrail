@@ -142,6 +142,24 @@ class UseEffectTest(unittest.TestCase):
 
         self.assertEqual(seen, ["initial", "from effect"])
 
+    def test_set_state_from_an_effect_schedules_the_next_render(self):
+        """render() cleared the dirty flag after running effects, wiping the
+        schedule the effect's own set_state had just made. With a @pure root
+        and an unchanged version the next tick then skipped, and the new
+        value sat unrendered until something else happened."""
+        @component
+        def Panel(_state):
+            value, set_value = use_state("initial")
+            use_effect(lambda: set_value("from effect"), [])
+            return Text(value)
+
+        layout = Layout(pure(lambda s: Panel(s)))
+        layout.tick(None, version=1)
+
+        ops = layout.tick(None, version=1)
+
+        self.assertIn("from effect", repr(ops))
+
     def test_hook_order_is_still_enforced_across_effect_and_state(self):
         toggle = {"on": True}
 
