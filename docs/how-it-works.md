@@ -20,7 +20,7 @@ flowchart LR
     SIM --> LAY --> DIFF --> SOCK --> STORE --> MUI
     MUI -- "action handlerId" --> SOCK
     SOCK -- "action handlerId" --> ACT
-    ACT -- "mutate + invalidate" --> SIM
+    ACT -- "mutate, mark dirty" --> SIM
 ```
 
 There are exactly two loops: state flows down as trees and patches,
@@ -64,7 +64,9 @@ Four gates, tried cheapest first, saving different things. **Version-skip**
 avoids the render outright when the host passes an unchanged token and the
 root is `@pure`. **Memoisation** skips the body of any `@pure` component whose
 arguments are unchanged and under which nothing went stale, so a moved token
-still only re-runs what moved. **Identity** settles the diff with one `is` when
+still only re-runs what moved. An argument that is the very mutable object it
+was last time is never taken as unchanged — an in-place change moves both
+sides — so pass values, not the host's state object. **Identity** settles the diff with one `is` when
 a render reused every subtree it had. **Compare** is the backstop: an `==`
 against the committed tree, needing no cooperation at all.
 
@@ -106,20 +108,29 @@ sequenceDiagram
     participant L as "Layout"
     U->>R: "click or type"
     R->>R: "preventDefault, stopPropagation"
-    R->>R: "debounce input, throttle slider"
+    R->>R: "show draft, debounce input, throttle slider"
     R->>S: "action handlerId + event"
     S->>H: "action handlerId + event"
-    H->>L: "adispatch (await if async)"
-    H->>L: "invalidate"
+    H->>L: "adispatch (await if async), marks dirty"
     L-->>H: "flush gives patch seq N"
     H->>S: "patch seq N"
     S->>R: "patch seq N"
 ```
 
 Notes: `preventDefault` runs synchronously in the React handler (a debounced
-callback can no longer cancel the event). Async handlers are awaited before
-invalidate so the re-render sees the saved state. Sync `dispatch` refuses
+callback can no longer cancel the event). A controlled input shows what was
+typed as a local draft until the server's value catches up, so the debounce
+does not put old text back; a pending edit is sent at once if the input
+unmounts. Async handlers are awaited before the layout is marked dirty, so the
+re-render sees the saved state, and `dispatch`/`adispatch` mark it dirty
+themselves, even when the handler raised part way. Sync `dispatch` refuses
 async handlers loudly instead of dropping the coroutine.
+
+`create_ws_app` keeps the session through what a live page will meet: an
+action for a handler the last patch removed is ignored, and a handler that
+raises, a render that fails, or a frame that is not JSON is logged on the
+`flyrail` logger. With `allowed_origins` it refuses websockets from other
+sites' pages before accepting them.
 
 ## Gap recovery
 
@@ -131,14 +142,19 @@ sequenceDiagram
     C->>C: "seq 5 arrives after 3: skip apply"
     C->>S: "resync-request (once)"
     S->>H: "resync-request"
-    H->>S: "snapshot seq 5 tree"
-    S->>C: "snapshot seq 5 tree"
-    C->>C: "replace tree, clear flag"
+    H->>S: "snapshot seq 6 tree slots"
+    S->>C: "snapshot seq 6 tree slots"
+    C->>C: "replace tree and slots, clear flag"
 ```
 
 Applying an out-of-order patch would corrupt the tree silently, so the
-store skips it and asks once (no resync spam while the gap persists).
-Duplicates and stale seqs are ignored without asking.
+store skips it and asks once (no resync spam while the gap persists). The
+same goes for a patch whose ops do not fit the tree it holds, and for a
+client that joins mid-stream: with no baseline it expects seq 1, the diff
+against an empty tree, and treats anything later as a gap. Duplicates and
+stale seqs are ignored without asking. A snapshot takes a seq of its own and
+carries the last value of every slot, since the store starts its slots over
+from it.
 
 ## Render pipeline
 
@@ -160,18 +176,27 @@ running its body. Serialization replaces each callable with `{handlerId,
 preventDefault, stopPropagation, throttleMs?}` and returns the node it was
 given wherever nothing changed, so untouched subtrees keep their identity; a
 memoised subtree reuses its serialized form too and replays its registry
-entries, since the registry is rebuilt from nothing each render. There is no
-deepcopy in this path — serialization used to mutate a copy of the whole tree,
+entries, since the registry is rebuilt from nothing each render. The new
+registry replaces the old one only once the render and the allowlist check
+succeed, so after a render that raises, the tree the client still shows keeps
+working. Handler ids are built from the path, and a path segment is the
+child's key where it has one and `#index` where it does not, so the two can
+never spell the same id. There is no deepcopy in this path — serialization used to mutate a copy of the whole tree,
 which cost more than the diff it fed. The allowlist rejects unknown node types
 on both ends (`__Slot__` exempt, `__Component__` never survives expansion).
-Effects run once the tree is built, children before parents.
+Effects run once the tree is built, children before parents; an effect that
+sets state schedules the next render like any other setter.
+
+On the client, `applyOps` copies only the containers on each op's path and
+shares every other subtree with the previous tree, and `ServerNode` is
+memoised, so a patch re-renders only the nodes it changed.
 
 ## Hook slots
 
 ```mermaid
 flowchart TD
     C["component call<br/>Section key sec"]
-    S["slot id is fn + key<br/>(or tree path)"]
+    S["slot id is fn + key<br/>(or keyed tree path)"]
     N["seen this render?"]
     N -- "no, first mount" --> I["init slots"]
     N -- "yes" --> R["reuse slots by call order"]
@@ -183,10 +208,12 @@ flowchart TD
     V --> U["unvisited pruned<br/>at end of render"]
 ```
 
-Keys follow reorders, positions behave React-like. The frame stack is
+Keys follow reorders, positions behave React-like. An unkeyed component is
+placed by its tree path, and that path is built from its ancestors' keys, so
+it moves with a keyed parent rather than staying at the old index. The frame stack is
 thread-local, so two Layouts driven from two threads cannot reach each other's
 slots. Setters bail out on identical values and schedule that component's slot
-alone rather than the whole layout, which is what makes per-component
+alone rather than the whole layout, waking a `Driver` if one is attached, which is what makes per-component
 memoisation possible; `use_memo` recomputes only on dep change (exotic values
 recompute rather than lie). `use_effect` runs after the render commits and its
 cleanup runs before the effect runs again and once when the component is
@@ -216,5 +243,7 @@ One `Driver` primitive serves all three: dirty flag + seq counter shared by
 `flush()` (sync) and `run()` (async, bursts coalesce). The version gate skips
 a tick's render while the host's token holds; a dispatched handler or a hook
 setter marks the layout dirty, and `invalidate()` covers any other change the
-token misses. The raw-ASGI adapter
-(`create_ws_app`) is the async recipe with one session per connection.
+token misses. The raw-ASGI adapter (`create_ws_app`) is the async recipe with
+one session per connection. A render that raises is logged and the loop waits
+for the next change rather than ending, so the page recovers once the state
+that broke it moves.

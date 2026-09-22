@@ -303,7 +303,9 @@ print(layout.set_slot("spindle_load", round(49 * 0.7, 3)))   # None
 ```
 
 Fifty updates, **no diff computed once**, and the tree stays byte-identical so
-the gates in §4 keep firing. Repeating a value sends nothing.
+the gates in §4 keep firing. Repeating a value sends nothing — and because the
+server then believes the client has it, a snapshot carries the last value of
+every slot, so a client that resyncs or connects late is not left blank.
 
 Worth being precise about what this wins: it is mostly a **CPU** optimisation.
 A slot pushes the whole value; a patch names the fields that moved. Over 49
@@ -349,6 +351,10 @@ The id is built from the child's `key` where it has one, falling back to its
 index. Before, the path segment was the index, so a click already in flight
 reached whatever now sat in that position — here, `b`. The registry is rebuilt
 every render, so there was no error to notice: just the wrong button firing.
+
+An index is written `#0` and a key is escaped, so an unkeyed child at index 0
+and a sibling keyed `0` never share an id. Hook state for an unkeyed component
+is placed by the same keyed path, so it moves with its row too.
 
 ---
 
@@ -433,7 +439,8 @@ happened.
 `invalidate()` deliberately does **not** drop memoised subtrees: a host that
 calls it every tick would otherwise lose the memo every tick. A tick host that
 versions its state need not call it at all — dispatched handlers and hook
-setters mark the layout dirty themselves. Host state reaches a component through its
-arguments, which the memo compares, so anything the host actually changed
-re-renders on that basis — a mutable object passed as-is included, since the
-memo never trusts one to be unchanged. `reset()` is the one that forgets everything.
+setters mark the layout dirty themselves. Host state reaches a component
+through its arguments, which the memo compares, so anything the host actually
+changed re-renders on that basis — a mutable object passed as-is included,
+since the memo never trusts one to be unchanged. `reset()` is the one that
+forgets everything.
