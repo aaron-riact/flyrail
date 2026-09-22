@@ -54,7 +54,14 @@ def create_ws_app(
                     break
                 if msg["type"] != "websocket.receive":
                     continue
-                data = json.loads(msg.get("text") or msg.get("bytes") or "{}")
+                try:
+                    data = json.loads(msg.get("text") or msg.get("bytes") or "{}")
+                except ValueError:
+                    log.warning("ignoring a message that is not JSON")
+                    continue
+                if not isinstance(data, dict):
+                    log.warning("ignoring a message that is not a JSON object")
+                    continue
                 if data.get("chan") != "ui":
                     if on_message is not None:
                         res = on_message(data, state)
@@ -69,7 +76,14 @@ def create_ws_app(
                         # the last patch removed is ordinary, not an error.
                         log.info("ignoring action for stale handler %r", hid)
                         continue
-                    await layout.adispatch(hid, state, data.get("event"))
+                    try:
+                        await layout.adispatch(hid, state, data.get("event"))
+                    except Exception:
+                        # One bad handler must not close the page: a closed
+                        # socket is a reload, and a reload loses the session.
+                        # It may have changed state before raising, so still
+                        # render.
+                        log.exception("handler %r raised", hid)
                     driver.invalidate()
                 elif kind == "resync-request":
                     driver.seq += 1

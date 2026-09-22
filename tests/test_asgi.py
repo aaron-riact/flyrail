@@ -119,6 +119,47 @@ class AdapterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ch.ui()[1]["type"], "patch")
         await self.stop(task, ch)
 
+    async def test_a_raising_handler_is_logged_and_the_session_survives(self):
+        def boom(state, event):
+            raise ValueError("handler bug")
+
+        app = create_ws_app(lambda s: Stack(
+            Button("Boom", on_click=boom, key="boom"), *panel(s)["children"]),
+            state_factory=lambda: {"v": 1})
+        ch = Channel()
+        task = asyncio.create_task(app(SCOPE, ch.receive, ch.send))
+        await ch.wait_ui(1)
+        children = ch.ui()[0]["tree"]["children"]
+
+        with self.assertLogs("flyrail", "ERROR") as logs:
+            await ch.incoming.put({"type": "websocket.receive", "text": json.dumps(
+                {"chan": "ui", "type": "action",
+                 "handlerId": children[0]["on_click"]["handlerId"]})})
+            await asyncio.sleep(0.05)
+        self.assertIn("handler bug", "\n".join(logs.output))
+        self.assertFalse(task.done(), "session ended on a handler error")
+
+        await ch.incoming.put({"type": "websocket.receive", "text": json.dumps(
+            {"chan": "ui", "type": "action",
+             "handlerId": children[2]["on_click"]["handlerId"]})})
+        await ch.wait_ui(2)
+        await self.stop(task, ch)
+
+    async def test_a_malformed_message_is_logged_and_the_session_survives(self):
+        ch = Channel()
+        task = await self.run_app(ch, state_factory=lambda: {"v": 1})
+
+        with self.assertLogs("flyrail", "WARNING"):
+            await ch.incoming.put({"type": "websocket.receive", "text": "{not json"})
+            await ch.incoming.put({"type": "websocket.receive", "text": "[1, 2]"})
+            await asyncio.sleep(0.05)
+        self.assertFalse(task.done(), "session ended on a malformed message")
+
+        await ch.incoming.put({"type": "websocket.receive", "text": json.dumps(
+            {"chan": "ui", "type": "resync-request"})})
+        await ch.wait_ui(2)
+        await self.stop(task, ch)
+
     async def test_rejects_non_websocket_scope(self):
         ch = Channel()
         app = create_ws_app(panel)
