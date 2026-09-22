@@ -52,10 +52,12 @@ def on_tick(state):
         broadcast(ui_envelope_patch(ops, seq))
 
 def on_ws(msg, state):
+    global seq
     if msg.get("chan") == "ui" and msg.get("type") == "action":
         layout.dispatch(msg["handlerId"], state, msg.get("event"))
     elif msg.get("type") == "resync-request":
-        broadcast(layout.snapshot(state, seq + 1))
+        seq += 1  # a snapshot takes a seq too, or the next patch reuses it
+        broadcast(layout.snapshot(state, seq))
 ```
 
 ## JS quickstart
