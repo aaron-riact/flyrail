@@ -9,7 +9,7 @@
     "./react": "./ServerNode.tsx"
   },
   "scripts": {
-    "test": "node --test js/protocol.test.mjs js/store.test.mjs"
+    "test": "node --test protocol.test.mjs store.test.mjs"
   },
   "peerDependencies": {
     "react": ">=18"
