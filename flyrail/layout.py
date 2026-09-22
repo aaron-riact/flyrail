@@ -91,8 +91,15 @@ def _segment(child: Any, index: int) -> Any:
     return f"#{index}"
 
 
-def _escape(path: str) -> str:
-    return path.replace("~", "~0").replace("/", "~1")
+def _escape(key: Any) -> str:
+    """A dict key as an RFC6901 pointer segment, spelled the way json.dumps
+    will spell it on the wire: non-string keys become strings there, so an
+    int key 2 is "/2" and True is "/true"."""
+    if isinstance(key, bool):
+        key = "true" if key else "false"
+    elif key is None:
+        key = "null"
+    return str(key).replace("~", "~0").replace("/", "~1")
 
 
 #: Wire defaults for event descriptors. preventDefault is True because a

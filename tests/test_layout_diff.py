@@ -41,6 +41,21 @@ class DiffTest(unittest.TestCase):
         json.dumps(ops)
 
 
+class NonStringKeyTest(unittest.TestCase):
+    """json.dumps writes a dict's non-string keys as strings, so a prop like
+    {1: "low", 2: "high"} is valid on the wire. The diff called .replace()
+    on the key itself and raised AttributeError the first time it changed."""
+
+    def test_int_keys_diff_to_the_pointer_json_will_use(self):
+        ops = _diff({"marks": {1: "low", 2: "mid"}}, {"marks": {1: "low", 2: "high"}})
+        self.assertEqual(ops, [{"op": "replace", "path": "/marks/2", "value": "high"}])
+
+    def test_bool_and_none_keys_use_their_json_spelling(self):
+        ops = _diff({"m": {True: 1, None: 1}}, {"m": {True: 2}})
+        self.assertEqual(ops, [{"op": "remove", "path": "/m/null"},
+                               {"op": "replace", "path": "/m/true", "value": 2}])
+
+
 if __name__ == "__main__":
     unittest.main()
 
