@@ -20,14 +20,22 @@ class Driver:
         self.layout = layout
         self.seq = 0
         self._event = asyncio.Event()
+        #: The loop run() waits on, so another thread can reach it. Asking for
+        #: the running loop from that thread finds none, and setting the Event
+        #: directly from there neither is thread-safe nor wakes the loop.
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     def invalidate(self) -> None:
         self.layout.invalidate()
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            self._event.set()  # nothing is waiting yet
+            return
         try:
-            loop = asyncio.get_running_loop()
+            running = asyncio.get_running_loop()
         except RuntimeError:
-            loop = None
-        if loop is None:
+            running = None
+        if running is loop:
             self._event.set()
         else:
             loop.call_soon_threadsafe(self._event.set)
@@ -47,6 +55,7 @@ class Driver:
         version_fn: Callable[[], Any] = lambda: None,
     ) -> None:
         """Never returns; cancel to stop. Bursts coalesce into one flush."""
+        self._loop = asyncio.get_running_loop()
         while True:
             await self._event.wait()
             self._event.clear()

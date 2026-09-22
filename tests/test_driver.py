@@ -56,7 +56,7 @@ class RunTest(unittest.IsolatedAsyncioTestCase):
 
         task = asyncio.create_task(d.run(lambda: state, send, lambda: state["v"]))
         try:
-            d.invalidate()  # running-loop path (call_soon_threadsafe)
+            d.invalidate()  # from the loop itself: direct set
             for _ in range(100):
                 if sent:
                     break
@@ -80,6 +80,55 @@ class RunTest(unittest.IsolatedAsyncioTestCase):
                 await task
             except asyncio.CancelledError:
                 pass
+
+
+class ThreadWakeTest(unittest.TestCase):
+    def test_invalidate_from_another_thread_wakes_the_loop(self):
+        """From a thread with no running loop, invalidate() used to set the
+        asyncio.Event directly. That is not thread-safe and does not wake a
+        loop blocked in select, so with no timer due the flush never came.
+
+        The loop runs on its own daemon thread so a regression fails here
+        after a second instead of hanging the suite.
+        """
+        import threading
+        import time
+
+        state = {"v": 1}
+        d = Driver(Layout(lambda s: Stack(Text(f"v={s['v']}"))))
+        sent = threading.Event()
+        envs = []
+
+        async def send(env):
+            envs.append(env)
+            sent.set()
+
+        loop = asyncio.new_event_loop()
+        runner = threading.Thread(target=loop.run_forever, daemon=True)
+        runner.start()
+        asyncio.run_coroutine_threadsafe(d.run(lambda: state, send), loop)
+        try:
+            time.sleep(0.05)  # let run() reach its wait
+            state["v"] = 2
+            d.invalidate()  # this thread, not the loop's
+
+            self.assertTrue(sent.wait(1.0), "invalidate() did not wake the loop")
+            self.assertIn("v=2", repr(envs[0]["ops"]))
+        finally:
+            async def shutdown():
+                pending = asyncio.all_tasks() - {asyncio.current_task()}
+                for t in pending:
+                    t.cancel()
+                await asyncio.gather(*pending, return_exceptions=True)
+
+            try:
+                asyncio.run_coroutine_threadsafe(shutdown(), loop).result(1.0)
+            except TimeoutError:
+                pass  # the stuck task of a regression; the thread is a daemon
+            loop.call_soon_threadsafe(loop.stop)
+            runner.join(1.0)
+            if not runner.is_alive():
+                loop.close()
 
 
 if __name__ == "__main__":
