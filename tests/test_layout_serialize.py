@@ -1,4 +1,5 @@
 """Focused tests for Layout.render handler serialization."""
+import json
 import unittest
 
 from flyrail import Layout, Slot, Stack, Text, Button
@@ -58,6 +59,23 @@ class SerializeTest(unittest.TestCase):
         # Same position/key re-registers (fresh closure); stale entries never linger.
         self.assertIn(hid, layout.registry)
         self.assertEqual(len(layout.registry), 1)
+
+    def test_on_change_becomes_a_handler_on_any_element(self):
+        """_el lifted on_click out of props but not on_change, so a callable
+        passed to anything but TextField stayed in props and the tree could
+        not be sent: json.dumps raised on the function."""
+        from flyrail.core import _el
+
+        moved = []
+        layout = Layout(lambda s: Stack(
+            _el("Slider", key="s", on_change=lambda st, e: moved.append(e))))
+        tree = layout.render({})
+
+        slider = tree["children"][0]
+        json.dumps(tree)
+        self.assertNotIn("on_change", slider["props"])
+        layout.dispatch(slider["on_change"]["handlerId"], {}, {"value": 3})
+        self.assertEqual(moved, [{"value": 3}])
 
     def test_an_empty_allowlist_allows_nothing(self):
         """`if self.allowed_types:` read an empty set as "no allowlist", so

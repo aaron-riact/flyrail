@@ -53,7 +53,8 @@ def _opts(event: str, prevent_default: bool, stop_propagation: bool,
 
 
 def _el(type_: str, *children: Any, key: Any = None, on_click: Callable | None = None,
-        event_options: dict | None = None, **props: Any) -> dict:
+        on_change: Callable | None = None, event_options: dict | None = None,
+        **props: Any) -> dict:
     node: dict[str, Any] = {"type": type_, "props": props}
     if key is not None:
         node["key"] = key
@@ -66,8 +67,12 @@ def _el(type_: str, *children: Any, key: Any = None, on_click: Callable | None =
             else:
                 flat.append(c)
         node["children"] = flat
+    # Lifted out of props, where a callable could not be serialized, onto the
+    # node, where Layout swaps it for a handler id.
     if on_click is not None:
         node["on_click"] = on_click
+    if on_change is not None:
+        node["on_change"] = on_change
     if event_options:
         node["event_options"] = event_options
     return node
