@@ -25,6 +25,28 @@ class DispatchTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             layout.dispatch("9:999:on_click:", {}, None)
 
+    def test_a_failed_render_keeps_the_last_handlers(self):
+        """The client still shows the last tree that rendered, so its handlers
+        must stay reachable. render() cleared the registry before rendering,
+        and a render that raised left it empty: every click was then unknown
+        and the panel could not be clicked back out of the bad state."""
+        clicked = []
+
+        def render(s):
+            if s["broken"]:
+                raise ValueError("render bug")
+            return Stack(Button("Fix", on_click=lambda st, e: clicked.append(1)))
+
+        layout = Layout(render)
+        layout.render({"broken": False})
+        hid = next(iter(layout.registry))
+
+        with self.assertRaises(ValueError):
+            layout.render({"broken": True})
+
+        layout.dispatch(hid, {})
+        self.assertEqual(clicked, [1])
+
     def test_closure_binds_per_row_args(self):
         # on_click=lambda st,ev,_id=i: ... carries row args without wire data.
         calls = []

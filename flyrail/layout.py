@@ -287,7 +287,6 @@ class Layout:
             self.on_schedule()
 
     def render(self, state: Any) -> dict:
-        self.registry.clear()
         tree = self._render_once(state)
         if self.strict and getattr(self.render_fn, "_flyrail_pure", False):
             again = self._render_once(state)
@@ -329,9 +328,12 @@ class Layout:
                 self._dirty_slots.discard(k)
         collected: dict[str, Callable] = {}
         tree = self._serialize(expanded, path="0", collected=collected)
-        self.registry.update(collected)
         if self.allowed_types:
             self._check_allowlist(tree)
+        # Swapped in only once the render has succeeded: the client still
+        # shows the last tree that did, and its handlers have to stay live.
+        self.registry.clear()
+        self.registry.update(collected)
         return tree
 
     def _run_effects(self) -> None:
