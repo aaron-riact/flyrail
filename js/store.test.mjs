@@ -64,3 +64,17 @@ test("subscribers are notified and can unsubscribe", () => {
   store.ingest(patch(2, [{ op: "add", path: "/b", value: 2 }]));
   assert.deepEqual(kinds, ["patch"]);
 });
+
+test("a client joining mid-stream asks for a snapshot instead of patching nothing", () => {
+  // A patch is a diff against a tree this client never had. Applied to {},
+  // a replace throws, lastSeq stays null, and every later patch throws too.
+  const sent = [];
+  const store = createStore({ onResync: (m) => sent.push(m) });
+  store.ingest(patch(5, [{ op: "replace", path: "/props/value", value: "x" }]));
+  assert.equal(store.doesNeedResync(), true);
+  assert.equal(store.getTree(), null);
+  assert.deepEqual(sent, [resyncRequestMessage()]);
+  store.ingest({ chan: "ui", type: "snapshot", seq: 6, tree: { a: 1 } });
+  store.ingest(patch(7, [{ op: "add", path: "/b", value: 2 }]));
+  assert.deepEqual(store.getTree(), { a: 1, b: 2 });
+});

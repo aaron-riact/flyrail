@@ -23,14 +23,12 @@ export function createStore(options = {}) {
 
   function ingestPatch(msg) {
     if (typeof msg.seq !== "number") throw new Error("patch without seq");
-    if (lastSeq === null) {
-      tree = applyOps(tree ?? {}, msg.ops);
-      lastSeq = msg.seq;
-      emit({ kind: "patch" });
-      return;
-    }
-    if (msg.seq <= lastSeq) return; // duplicate or stale: ignore
-    if (msg.seq !== lastSeq + 1) {
+    // No baseline yet reads as seq 0: the server's first patch is seq 1 and
+    // a diff against {}, so it applies; any later one is a diff against a
+    // tree this client never had, which is just a gap.
+    const base = lastSeq ?? 0;
+    if (msg.seq <= base) return; // duplicate or stale: ignore
+    if (msg.seq !== base + 1) {
       // Out-of-order apply would corrupt the tree: skip and ask for snapshot.
       if (!needsResync) {
         needsResync = true;
