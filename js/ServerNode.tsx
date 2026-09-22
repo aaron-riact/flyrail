@@ -109,7 +109,10 @@ export function createRenderer(registry: Record<string, any>) {
         api.send(hid, e?.target?.value);
       };
     }
-    const children = (node.children || []).map((c: any, i: number) => {
+    // No server children: leave props.children alone. Passing an empty list
+    // as JSX children overrides the prop, which blanked every Button label.
+    if (!node.children?.length) return <Comp {...props} />;
+    const children = node.children.map((c: any, i: number) => {
       if (typeof c === 'string') return <React.Fragment key={i}>{c}</React.Fragment>;
       // stable keys: key comes from python `key=` (item id, never index-derived)
       return <ServerNode key={childKey(c, i)} node={c} send={send} />;
