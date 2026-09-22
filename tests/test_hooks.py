@@ -77,6 +77,28 @@ class StateTest(unittest.TestCase):
             layout.tick({"extra": True})
 
 
+    def test_set_state_during_the_body_schedules_another_render(self):
+        """The body has already read the old value, so the new one needs a
+        render of its own. The schedule it made was discarded as soon as the
+        body returned, and render() then cleared the dirty flag, so with a
+        @pure root and an unchanged version the value never showed."""
+        from flyrail import pure
+
+        @component
+        def Once():
+            v, set_v = use_state(0)
+            if v == 0:
+                set_v(1)
+            return Text(str(v))
+
+        layout = Layout(pure(lambda s: Once()))
+        layout.tick(None, version=1)
+
+        ops = layout.tick(None, version=1)
+
+        self.assertIn("'1'", repr(ops))
+        self.assertEqual(layout.tick(None, version=1), [], "settled, not looping")
+
     def test_unkeyed_state_moves_with_its_keyed_parent(self):
         """An unkeyed component is placed by its path, and the path has to be
         built from ancestor keys the way handler ids are; built from indices,

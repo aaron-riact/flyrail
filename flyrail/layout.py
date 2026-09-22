@@ -306,7 +306,9 @@ class Layout:
                     "nondeterminism (time, random, counters, unversioned reads)")
         # Clean before the effects, not after: an effect that sets state has
         # just scheduled the next render, and clearing afterwards erased that.
-        self._dirty = False
+        # A slot still dirty was set from its own body mid-render, and needs
+        # that render too.
+        self._dirty = bool(self._dirty_slots)
         self._run_effects()
         return tree
 
@@ -416,6 +418,10 @@ class Layout:
 
             slots = self._hooks.setdefault(slot_id, [])
             self._subtree[slot_id] = set()
+            # Running the body answers whatever made this slot dirty. Cleared
+            # before the call, not after, so a set_state from the body itself
+            # -- which the body has already read past -- stays scheduled.
+            self._dirty_slots.discard(slot_id)
             self._expanding.append(slot_id)
             frame = _hooks.enter(slots, lambda sid=slot_id: self._invalidate_slot(sid))
             try:
@@ -430,7 +436,6 @@ class Layout:
                         "hook count changed between renders: call hooks "
                         "unconditionally in the same order every render")
                 self._hooks_visited.add(slot_id)
-                self._dirty_slots.discard(slot_id)
                 # Stays on the expanding stack across this call: children are
                 # expanded here, and each has to be recorded against every
                 # component above it or an ancestor cannot tell that something

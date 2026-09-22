@@ -46,7 +46,8 @@ Covers both halves: `flyrail` (Python) and `flyrail-renderer` (JS).
 - Hook state of an unkeyed component stayed at the old index when its keyed
   parent moved.
 - A `@pure` component given the host's state object never re-rendered.
-- `set_state` from `use_effect` did not schedule a render.
+- `set_state` from `use_effect`, or from the component's own body, did not
+  schedule a render.
 - `Driver.invalidate()` from another thread did not wake the loop, and hook
   setters never woke it at all.
 - A render that raised froze an ASGI session and emptied the handler registry.
