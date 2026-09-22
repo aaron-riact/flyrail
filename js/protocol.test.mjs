@@ -202,3 +202,43 @@ test("slot hub replace notifies changed and removed names only", () => {
   assert.equal(hub.get("b"), undefined);
   assert.equal(hub.get("c"), 3);
 });
+
+test("applyOps shares every subtree an op does not touch", () => {
+  // structuredClone of the whole tree per patch gave every node a new
+  // identity, so nothing downstream could tell what had actually changed.
+  const doc = {
+    type: "Stack",
+    children: [
+      { type: "Text", props: { value: "a" } },
+      { type: "Text", props: { value: "b" } },
+    ],
+    props: { gap: 1 },
+  };
+  const out = applyOps(doc, [{ op: "replace", path: "/children/1/props/value", value: "B" }]);
+
+  assert.equal(out.children[1].props.value, "B");
+  assert.equal(out.children[0], doc.children[0], "untouched sibling was copied");
+  assert.equal(out.props, doc.props, "untouched props were copied");
+  assert.notEqual(out.children, doc.children);
+  assert.equal(doc.children[1].props.value, "b", "input was mutated");
+});
+
+test("applyOps applies several ops to one path without touching the input", () => {
+  const doc = { children: [{ key: "a" }, { key: "b" }, { key: "c" }] };
+  const frozen = structuredClone(doc);
+  const out = applyOps(doc, [
+    { op: "remove", path: "/children/1" },
+    { op: "add", path: "/children/1", value: { key: "x" } },
+    { op: "add", path: "/children/-", value: { key: "z" } },
+  ]);
+  assert.deepEqual(out.children.map((c) => c.key), ["a", "x", "c", "z"]);
+  assert.equal(out.children[0], doc.children[0]);
+  assert.deepEqual(doc, frozen);
+});
+
+test("applyOps copies an op's value, so the message can be reused", () => {
+  const value = { props: { value: "v" } };
+  const out = applyOps({}, [{ op: "add", path: "/n", value }]);
+  value.props.value = "changed";
+  assert.equal(out.n.props.value, "v");
+});

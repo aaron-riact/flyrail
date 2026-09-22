@@ -150,17 +150,6 @@ export function parsePointer(path) {
     .map((seg) => seg.replace(/~1/g, "/").replace(/~0/g, "~"));
 }
 
-function parentOf(doc, segments) {
-  let node = doc;
-  for (const seg of segments) {
-    if (node === null || typeof node !== "object") {
-      throw new Error("pointer traverses a scalar");
-    }
-    node = Array.isArray(node) ? node[Number(seg)] : node[seg];
-  }
-  return node;
-}
-
 function setKey(container, key, value, create) {
   if (Array.isArray(container)) {
     if (key === "-") {
@@ -186,21 +175,35 @@ function setKey(container, key, value, create) {
 
 export function applyOps(doc, ops) {
   // Applies the RFC6902 subset Layout emits (add/replace/remove). Returns a
-  // new document; the input is deep-cloned, never mutated (React state safe).
-  // Only understands what _diff produces: dict recursion plus wholesale
-  // array replacement, but array indices are handled for robustness.
-  let out = structuredClone(doc);
+  // new document and never mutates the input (React state safe).
+  //
+  // Copy-on-write: only the containers on each op's path are copied, and
+  // every subtree no op touches is shared with the input. Cloning the whole
+  // tree gave every node a new identity per patch, so nothing downstream --
+  // React.memo, a selector -- could tell what had actually changed.
+  const fresh = new WeakSet(); // containers copied by this call: safe to write
+  const own = (node) => {
+    if (node === null || typeof node !== "object") {
+      throw new Error("pointer traverses a scalar");
+    }
+    if (fresh.has(node)) return node;
+    const copy = Array.isArray(node) ? node.slice() : { ...node };
+    fresh.add(copy);
+    return copy;
+  };
+  let out = doc;
   for (const op of ops ?? []) {
     const segments = parsePointer(op.path ?? "");
     if (segments.length === 0) {
-      if (op.op === "remove") {
-        out = {};
-      } else {
-        out = structuredClone(op.value);
-      }
+      out = op.op === "remove" ? {} : structuredClone(op.value);
       continue;
     }
-    const parent = parentOf(out, segments.slice(0, -1));
+    out = own(out);
+    let parent = out;
+    for (const seg of segments.slice(0, -1)) {
+      const index = Array.isArray(parent) ? Number(seg) : seg;
+      parent = parent[index] = own(parent[index]);
+    }
     const key = segments[segments.length - 1];
     if (op.op === "remove") {
       if (Array.isArray(parent)) parent.splice(Number(key), 1);
