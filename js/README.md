@@ -17,7 +17,10 @@ descriptors to real components. No switch statement: with
   the descriptor opts out; inputs debounce at 150ms unless `throttleMs`
   selects slider-style throttling (leading + trailing latest).
 - `__Slot__` nodes subscribe by name; tick-rate values arrive as
-  `{chan:'ui', type:'slot'}` and update without a tree patch.
+  `{chan:'ui', type:'slot'}` and update without a tree patch. Pass
+  `createRenderer(registry, { slots: store.slots })` so slot messages and
+  snapshot slots reach them; the hub remembers values, so a Slot that mounts
+  late still shows the latest one.
 - For prod bundles prefer an explicit allowlist
   (`createRenderer({Button, TextField})`) over the full namespace import
   to keep tree-shaking.

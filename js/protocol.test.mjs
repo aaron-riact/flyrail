@@ -10,6 +10,7 @@ import {
   normalizeButtonProps,
   applyOps,
   parsePointer,
+  createSlotHub,
   debounce,
   createChangeSender,
   createThrottledChangeSender,
@@ -173,4 +174,31 @@ test("applyOps replaces the root document", () => {
 test("applyOps rejects unknown ops and skew loudly", () => {
   assert.throws(() => applyOps({}, [{ op: "move", path: "/a" }]), /unsupported op/);
   assert.throws(() => applyOps({}, [{ op: "replace", path: "/missing", value: 1 }]), /missing key/);
+});
+
+test("slot hub remembers values and notifies by name", () => {
+  const hub = createSlotHub();
+  hub.set("rpm", 1200); // before anyone listens: kept, not lost
+  assert.equal(hub.get("rpm"), 1200);
+
+  const heard = [];
+  const off = hub.subscribe("rpm", () => heard.push(hub.get("rpm")));
+  hub.subscribe("temp", () => heard.push("temp"));
+  hub.set("rpm", 1300);
+  hub.set("rpm", 1300); // unchanged: no notify
+  off();
+  hub.set("rpm", 1400);
+  assert.deepEqual(heard, [1300]);
+});
+
+test("slot hub replace notifies changed and removed names only", () => {
+  const hub = createSlotHub();
+  hub.set("a", 1);
+  hub.set("b", 2);
+  const heard = [];
+  for (const n of ["a", "b", "c"]) hub.subscribe(n, () => heard.push(n));
+  hub.replace({ a: 1, c: 3 });
+  assert.deepEqual(heard.sort(), ["b", "c"]);
+  assert.equal(hub.get("b"), undefined);
+  assert.equal(hub.get("c"), 3);
 });

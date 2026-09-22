@@ -3,7 +3,7 @@
 // tracks seq for gap detection, and notifies subscribers. React binding
 // is a thin useSyncExternalStore wrapper (see ServerNode docs); all logic
 // here is unit-tested with `node --test`.
-import { applyOps } from "./protocol.mjs";
+import { applyOps, createSlotHub } from "./protocol.mjs";
 
 export function resyncRequestMessage() {
   return { chan: "ui", type: "resync-request" };
@@ -14,7 +14,8 @@ export function createStore(options = {}) {
   let tree = null;
   let lastSeq = null;
   let needsResync = false;
-  const slots = new Map();
+  // A hub rather than a Map, so a renderer can share it: see createRenderer.
+  const slots = createSlotHub();
   const listeners = new Set();
 
   function emit(kind) {
@@ -62,8 +63,7 @@ export function createStore(options = {}) {
       emit({ kind: "slot" });
     } else if (msg.type === "snapshot") {
       tree = structuredClone(msg.tree ?? {});
-      slots.clear();
-      for (const [k, v] of Object.entries(msg.slots ?? {})) slots.set(k, v);
+      slots.replace(msg.slots);
       if (typeof msg.seq === "number") lastSeq = msg.seq;
       needsResync = false;
       emit({ kind: "snapshot" });
@@ -75,6 +75,7 @@ export function createStore(options = {}) {
     ingest,
     getTree: () => tree,
     getSlot: (name) => slots.get(name),
+    slots,
     getSeq: () => lastSeq,
     doesNeedResync: () => needsResync,
     subscribe: (fn) => {

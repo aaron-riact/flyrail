@@ -9,6 +9,7 @@ import {
   childKey,
   isKnownComponent,
   normalizeButtonProps,
+  createSlotHub,
 } from './protocol.mjs';
 
 /**
@@ -18,28 +19,31 @@ import {
  *   import { createRenderer } from 'flyrail-renderer/react';
  *   const { ServerNode, setSlot } = createRenderer({ ...MUI });
  *
+ * Pass the store's slots so slot and snapshot messages reach SlotView:
+ *
+ *   createRenderer({ ...MUI }, { slots: store.slots });
+ *
  * Wire logic (message shapes, key resolution, label folding) lives in
  * protocol.mjs and is unit-tested with `node --test`; this file only
  * binds it to React.
  */
-export function createRenderer(registry: Record<string, any>) {
-  // Slot store is per-renderer so two mounted trees cannot cross-talk.
-  const slotListeners = new Map<string, Set<(v: any) => void>>();
-
+export function createRenderer(
+  registry: Record<string, any>,
+  { slots = createSlotHub() }: { slots?: ReturnType<typeof createSlotHub> } = {},
+) {
+  // One hub per renderer unless shared, so two mounted trees cannot
+  // cross-talk. It remembers values, so a SlotView that mounts after its
+  // value arrived still shows it.
   function setSlot(name: string, value: any) {
-    slotListeners.get(name)?.forEach((fn) => fn(value));
+    slots.set(name, value);
   }
 
   function SlotView({ name, fallback }: { name: string; fallback?: any }) {
-    const [v, setV] = React.useState(fallback);
-    React.useEffect(() => {
-      const fn = (nv: any) => setV(nv);
-      if (!slotListeners.has(name)) slotListeners.set(name, new Set());
-      slotListeners.get(name)!.add(fn);
-      return () => {
-        slotListeners.get(name)?.delete(fn);
-      };
-    }, [name]);
+    const subscribe = React.useCallback(
+      (onChange: () => void) => slots.subscribe(name, onChange),
+      [name],
+    );
+    const v = React.useSyncExternalStore(subscribe, () => slots.get(name));
     return <>{v ?? fallback}</>;
   }
 
@@ -120,5 +124,5 @@ export function createRenderer(registry: Record<string, any>) {
     return <Comp {...props}>{children}</Comp>;
   }
 
-  return { ServerNode, setSlot };
+  return { ServerNode, setSlot, slots };
 }

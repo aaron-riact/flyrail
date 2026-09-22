@@ -67,8 +67,9 @@ import * as MUI from '@mui/material';
 import { createRenderer } from 'flyrail-renderer/react';
 import { createStore } from 'flyrail-renderer/store';
 
-const { ServerNode } = createRenderer({ ...MUI });  // auto-registered, no switch
 const store = createStore({ onResync: (req) => ws.send(JSON.stringify(req)) });
+// auto-registered, no switch; sharing the store's slots feeds every Slot
+const { ServerNode } = createRenderer({ ...MUI }, { slots: store.slots });
 ws.onmessage = (e) => store.ingest(JSON.parse(e.data));
 // render store.getTree() via <ServerNode node={tree} send={...} />
 ```

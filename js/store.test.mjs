@@ -88,3 +88,13 @@ test("a patch that does not fit the tree asks for a snapshot instead of throwing
   assert.equal(store.doesNeedResync(), true);
   assert.deepEqual(sent, [resyncRequestMessage()]);
 });
+
+test("store slots live in a hub a renderer can share", () => {
+  const store = createStore();
+  const heard = [];
+  store.slots.subscribe("rpm", () => heard.push(store.slots.get("rpm")));
+  store.ingest({ chan: "ui", type: "slot", name: "rpm", value: 1200 });
+  store.ingest({ chan: "ui", type: "snapshot", seq: 2, tree: {}, slots: { rpm: 900 } });
+  assert.deepEqual(heard, [1200, 900]);
+  assert.equal(store.getSlot("rpm"), 900);
+});

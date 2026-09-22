@@ -1,7 +1,8 @@
 import * as React from "react";
 import { afterEach, expect, test } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createRenderer } from "./ServerNode.tsx";
+import { createStore } from "./store.mjs";
 
 afterEach(cleanup);
 
@@ -61,4 +62,28 @@ test("server children still render inside a component", () => {
     />,
   );
   expect(document.body.textContent).toBe("plaint");
+});
+
+const slotNode = { type: "__Slot__", props: { name: "rpm", default: "--" } };
+
+test("a slot value set before the SlotView mounts is shown", () => {
+  // setSlot only told current listeners, so a value that arrived before the
+  // SlotView mounted was dropped and the default showed until the next one.
+  const { ServerNode, setSlot } = createRenderer(registry);
+  setSlot("rpm", 1200);
+  render(<ServerNode node={slotNode} send={() => {}} />);
+  expect(document.body.textContent).toBe("1200");
+});
+
+test("slots reach SlotView through a shared store, snapshots included", () => {
+  const store = createStore();
+  const { ServerNode } = createRenderer(registry, { slots: store.slots });
+  render(<ServerNode node={slotNode} send={() => {}} />);
+  expect(document.body.textContent).toBe("--");
+
+  act(() => store.ingest({ chan: "ui", type: "slot", name: "rpm", value: 1200 }));
+  expect(document.body.textContent).toBe("1200");
+
+  act(() => store.ingest({ chan: "ui", type: "snapshot", seq: 1, tree: {}, slots: { rpm: 900 } }));
+  expect(document.body.textContent).toBe("900");
 });

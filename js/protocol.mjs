@@ -215,3 +215,41 @@ export function applyOps(doc, ops) {
   }
   return out;
 }
+
+export function createSlotHub() {
+  // Last value per slot name, plus listeners per name. Remembering the value
+  // is the point: a SlotView that mounts after its value arrived must still
+  // show it, and a store and a renderer can share one hub.
+  const values = new Map();
+  const listeners = new Map();
+
+  function notify(name) {
+    listeners.get(name)?.forEach((fn) => fn());
+  }
+
+  return {
+    get: (name) => values.get(name),
+    set(name, value) {
+      if (values.has(name) && Object.is(values.get(name), value)) return;
+      values.set(name, value);
+      notify(name);
+    },
+    replace(entries) {
+      // A snapshot: exactly these slots now, telling only the names that moved.
+      const next = new Map(Object.entries(entries ?? {}));
+      const moved = [];
+      for (const name of values.keys()) if (!next.has(name)) moved.push(name);
+      for (const [name, value] of next) {
+        if (!values.has(name) || !Object.is(values.get(name), value)) moved.push(name);
+      }
+      values.clear();
+      for (const [name, value] of next) values.set(name, value);
+      moved.forEach(notify);
+    },
+    subscribe(name, fn) {
+      if (!listeners.has(name)) listeners.set(name, new Set());
+      listeners.get(name).add(fn);
+      return () => listeners.get(name)?.delete(fn);
+    },
+  };
+}
