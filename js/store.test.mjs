@@ -78,3 +78,13 @@ test("a client joining mid-stream asks for a snapshot instead of patching nothin
   store.ingest(patch(7, [{ op: "add", path: "/b", value: 2 }]));
   assert.deepEqual(store.getTree(), { a: 1, b: 2 });
 });
+
+test("a patch that does not fit the tree asks for a snapshot instead of throwing", () => {
+  const sent = [];
+  const store = createStore({ onResync: (m) => sent.push(m) });
+  store.ingest(patch(1, [{ op: "add", path: "/a", value: 1 }]));
+  store.ingest(patch(2, [{ op: "replace", path: "/missing/x", value: 2 }]));
+  assert.deepEqual(store.getTree(), { a: 1 });
+  assert.equal(store.doesNeedResync(), true);
+  assert.deepEqual(sent, [resyncRequestMessage()]);
+});

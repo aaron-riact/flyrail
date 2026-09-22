@@ -30,16 +30,28 @@ export function createStore(options = {}) {
     if (msg.seq <= base) return; // duplicate or stale: ignore
     if (msg.seq !== base + 1) {
       // Out-of-order apply would corrupt the tree: skip and ask for snapshot.
-      if (!needsResync) {
-        needsResync = true;
-        emit({ kind: "resync-needed" });
-        if (onResync) onResync(resyncRequestMessage());
-      }
+      requestResync();
       return;
     }
-    tree = applyOps(tree ?? {}, msg.ops);
+    let next;
+    try {
+      next = applyOps(tree ?? {}, msg.ops);
+    } catch {
+      // The ops do not fit the tree we hold, so the two have drifted apart.
+      // Throwing would leave every later patch to fail the same way.
+      requestResync();
+      return;
+    }
+    tree = next;
     lastSeq = msg.seq;
     emit({ kind: "patch" });
+  }
+
+  function requestResync() {
+    if (needsResync) return;
+    needsResync = true;
+    emit({ kind: "resync-needed" });
+    if (onResync) onResync(resyncRequestMessage());
   }
 
   function ingest(msg) {
